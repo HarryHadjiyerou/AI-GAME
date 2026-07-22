@@ -29,7 +29,8 @@ const Assets = {
         const im = new Image();
         im.onload = () => { this.img[name] = im; resolve(); };
         im.onerror = () => { this.img[name] = this._placeholder(name); resolve(); };
-        im.src = url;
+        // INLINE_ASSETS lets a single-file build ship every asset as a data URI
+        im.src = (window.INLINE_ASSETS && window.INLINE_ASSETS[url]) || url;
       })
     );
     return Promise.all(jobs).then(() => { this.loaded = true; });

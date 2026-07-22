@@ -38,7 +38,7 @@ const AudioMan = {
   playMusic(src) {
     if (this.music && this.music._src === src && !this.music.paused) return;
     this.stopMusic();
-    const a = new Audio(src);
+    const a = new Audio((window.INLINE_ASSETS && window.INLINE_ASSETS[src]) || src);
     a._src = src;
     a.loop = true;
     a.volume = 0;
