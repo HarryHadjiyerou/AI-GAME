@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 52 52">
+  <!-- Healing heart pickup -->
+  <defs>
+    <radialGradient id="hg" cx="0.35" cy="0.3" r="1">
+      <stop offset="0" stop-color="#ff9eb4"/><stop offset="0.55" stop-color="#e83a5a"/><stop offset="1" stop-color="#a01230"/>
+    </radialGradient>
+  </defs>
+  <path d="M26 46 C12 36 4 26 4 16 C4 8 10 3 17 3 C21 3 25 6 26 10 C27 6 31 3 35 3 C42 3 48 8 48 16 C48 26 40 36 26 46 Z" fill="url(#hg)"/>
+  <ellipse cx="16" cy="13" rx="6" ry="4.4" fill="#ffd9e2" opacity="0.8" transform="rotate(-24 16 13)"/>
+</svg>

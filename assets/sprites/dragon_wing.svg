@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="220" viewBox="0 0 300 220">
+  <!-- Dragon wing. Root at bottom-left (20,210); the game rotates it there to flap. -->
+  <defs>
+    <linearGradient id="memb" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6e4a3a"/><stop offset="0.6" stop-color="#4a2e28"/><stop offset="1" stop-color="#2c1a18"/>
+    </linearGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a3540"/><stop offset="1" stop-color="#1c1820"/>
+    </linearGradient>
+  </defs>
+  <!-- membrane -->
+  <path d="M20 210 C30 150 60 90 120 50 C110 80 108 104 116 118 C140 84 176 60 220 52 C200 76 192 98 198 114 C226 92 258 80 288 80 C258 108 232 144 216 184 C180 206 80 216 20 210 Z" fill="url(#memb)"/>
+  <!-- membrane ribs -->
+  <path d="M20 210 C60 170 96 140 116 118 M20 210 C90 180 160 140 198 114 M20 210 C120 190 200 150 288 80" stroke="#241414" stroke-width="4" fill="none" opacity="0.65"/>
+  <!-- leading-edge bone -->
+  <path d="M14 214 C24 148 56 84 122 44 C130 40 138 42 140 48 C138 54 132 56 126 60 C70 100 42 158 32 212 Z" fill="url(#bone)"/>
+  <!-- wing claw -->
+  <path d="M118 46 L138 22 L142 44 Z" fill="#b9a06a"/>
+  <!-- torn membrane edges for menace -->
+  <path d="M216 184 L204 196 L214 196 L202 208" stroke="#2c1a18" stroke-width="5" fill="none" stroke-linecap="round"/>
+</svg>

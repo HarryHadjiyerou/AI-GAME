@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="110" height="150" viewBox="0 0 110 150">
+  <!-- Troll brute with spiked club. Faces left. -->
+  <defs>
+    <linearGradient id="tskin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d9457"/><stop offset="1" stop-color="#4c5f33"/>
+    </linearGradient>
+    <linearGradient id="belly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b8c48e"/><stop offset="1" stop-color="#8a996a"/>
+    </linearGradient>
+    <linearGradient id="club" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6e5233"/><stop offset="1" stop-color="#463218"/>
+    </linearGradient>
+  </defs>
+  <!-- club raised behind, over shoulder -->
+  <g transform="rotate(24 84 60)">
+    <rect x="80" y="10" width="9" height="66" rx="4" fill="url(#club)"/>
+    <ellipse cx="84.5" cy="16" rx="15" ry="20" fill="url(#club)"/>
+    <path d="M74 6 L70 -2 M84 -3 L84 -12 M95 6 L100 -2 M97 22 L106 20" stroke="#c9ccd4" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- back arm to club -->
+  <path d="M66 62 C72 54 78 48 84 44 L92 54 C86 58 78 64 74 70 Z" fill="url(#tskin)"/>
+  <!-- legs: thick, slightly bent -->
+  <path d="M38 108 C36 118 34 130 32 140 L48 143 C50 132 51 122 52 112 Z" fill="url(#tskin)"/>
+  <path d="M66 108 C68 118 71 130 74 140 L58 143 C56 132 55 122 55 112 Z" fill="url(#tskin)"/>
+  <path d="M30 138 L50 142 L48 149 L27 146 Z" fill="#3c4a28"/>
+  <path d="M76 138 L56 142 L58 149 L79 146 Z" fill="#3c4a28"/>
+  <!-- hunched massive torso -->
+  <path d="M30 62 C22 78 22 96 34 112 C48 122 66 120 74 110 C82 94 80 74 68 58 C56 48 38 48 30 62 Z" fill="url(#tskin)"/>
+  <!-- belly plate -->
+  <ellipse cx="50" cy="94" rx="20" ry="22" fill="url(#belly)" opacity="0.9"/>
+  <!-- shoulder hide + skull trophy -->
+  <path d="M56 50 C66 48 78 52 84 60 C80 66 70 68 62 64 Z" fill="#5a4a30"/>
+  <circle cx="74" cy="58" r="6" fill="#ddd8c4"/>
+  <circle cx="72" cy="57" r="1.6" fill="#2c2416"/><circle cx="77" cy="57" r="1.6" fill="#2c2416"/>
+  <!-- head sunk into shoulders -->
+  <path d="M26 44 C24 30 34 18 48 18 C60 18 68 28 66 42 C64 52 54 58 44 56 C34 56 28 52 26 44 Z" fill="url(#tskin)"/>
+  <!-- jaw + tusks -->
+  <path d="M22 46 C30 54 46 56 56 50 L54 60 C44 66 30 62 22 54 Z" fill="#5c7038"/>
+  <path d="M27 52 L24 42 L33 50 Z" fill="#e4dcc0"/>
+  <path d="M47 55 L50 45 L40 53 Z" fill="#e4dcc0"/>
+  <!-- eye: small, angry -->
+  <circle cx="33" cy="34" r="3.4" fill="#ffb63e"/>
+  <circle cx="32" cy="34" r="1.7" fill="#7c1c0c"/>
+  <path d="M26 28 L40 30" stroke="#3c4a26" stroke-width="3" stroke-linecap="round"/>
+  <!-- ear -->
+  <path d="M64 30 L76 24 L66 40 Z" fill="#68804a"/>
+  <!-- front arm hanging huge -->
+  <path d="M32 62 C24 72 18 84 16 96 L28 100 C32 88 36 78 42 70 Z" fill="url(#tskin)"/>
+  <circle cx="22" cy="100" r="9" fill="#68804a"/>
+</svg>

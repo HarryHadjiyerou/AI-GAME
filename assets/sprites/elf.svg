@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="140" viewBox="0 0 100 140">
+  <!-- Elf warrior body (sword is a separate asset: sword.svg). Faces right. -->
+  <defs>
+    <linearGradient id="armor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f7d46"/><stop offset="1" stop-color="#24512c"/>
+    </linearGradient>
+    <linearGradient id="cape" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2e5f38"/><stop offset="1" stop-color="#173420"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4e6b0"/><stop offset="1" stop-color="#cdae62"/>
+    </linearGradient>
+    <linearGradient id="pants" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a3a28"/><stop offset="1" stop-color="#2c2117"/>
+    </linearGradient>
+  </defs>
+  <!-- flowing cape -->
+  <path d="M46 38 C20 52 10 86 16 118 C26 110 30 112 34 104 C40 92 40 66 50 52 Z" fill="url(#cape)" opacity="0.95"/>
+  <!-- back leg (stride) -->
+  <path d="M44 92 C38 102 30 112 26 124 L36 128 C42 116 48 106 52 98 Z" fill="url(#pants)"/>
+  <path d="M25 122 L38 127 L36 136 L20 132 Z" fill="#5a4630"/>
+  <!-- front leg -->
+  <path d="M56 94 C60 104 64 114 68 124 L78 120 C74 108 68 98 64 92 Z" fill="url(#pants)"/>
+  <path d="M66 121 L80 117 L84 128 L68 132 Z" fill="#6b5439"/>
+  <!-- torso armor -->
+  <path d="M42 50 C40 66 40 82 46 96 C54 100 62 98 66 94 C68 78 66 62 60 50 Z" fill="url(#armor)"/>
+  <!-- gold chest trim -->
+  <path d="M44 58 C52 64 58 62 63 56 L62 50 L45 50 Z" fill="#d9b054"/>
+  <path d="M45 74 C52 79 58 77 64 72 L64 66 C57 71 51 72 45 68 Z" fill="#c39b41" opacity="0.9"/>
+  <!-- belt -->
+  <path d="M44 88 L66 86 L66 93 L45 95 Z" fill="#7a5c2e"/>
+  <circle cx="55" cy="90" r="3.4" fill="#e8c66a"/>
+  <!-- shoulder pauldron -->
+  <path d="M40 46 C38 54 40 60 46 62 C52 60 54 52 51 46 C48 42 43 42 40 46 Z" fill="#d9b054"/>
+  <!-- rear arm (hangs, hand near hip) -->
+  <path d="M45 56 C41 64 39 74 41 84 L48 84 C47 74 48 66 50 58 Z" fill="#38683f"/>
+  <!-- head -->
+  <ellipse cx="58" cy="34" rx="12.5" ry="13.5" fill="#f0c9a2"/>
+  <!-- pointed ear -->
+  <path d="M47 32 L38 27 L48 25 Z" fill="#eec19a"/>
+  <!-- hair swept back -->
+  <path d="M48 24 C52 16 64 16 70 24 C73 29 72 36 70 40 C74 32 74 24 69 19 C62 12 50 13 46 21 C43 26 44 32 46 36 C45 31 46 27 48 24 Z" fill="url(#hair)"/>
+  <path d="M47 23 C53 17 64 17 69 25 C70 27 70 29 70 31 C64 25 55 24 49 28 Z" fill="url(#hair)"/>
+  <!-- eye + brow -->
+  <circle cx="63" cy="33" r="1.8" fill="#2c4a6e"/>
+  <path d="M60 29 L67 28" stroke="#a8854e" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+  <!-- sword arm raised forward (hand at grip point ~x84,y66) -->
+  <path d="M58 52 C66 54 74 58 80 64 L74 72 C68 66 62 62 56 60 Z" fill="#3f7d46"/>
+  <circle cx="79" cy="67" r="6" fill="#f0c9a2"/>
+  <!-- gauntlet -->
+  <path d="M70 60 C74 62 78 66 80 70 L74 74 C71 70 68 66 66 64 Z" fill="#d9b054" opacity="0.85"/>
+</svg>

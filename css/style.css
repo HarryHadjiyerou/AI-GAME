@@ -1,0 +1,44 @@
+/* Elfblade — global page styling. The game itself renders in canvas. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: #0b0910;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#game-wrap {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 100% at 50% 0%, #17131f 0%, #0b0910 70%);
+}
+
+#game {
+  display: block;
+  /* Canvas is letterboxed to preserve the 16:9 logical resolution */
+  box-shadow: 0 0 80px rgba(0,0,0,.8);
+  cursor: pointer;
+}
+
+/* Portrait-orientation hint on phones */
+#rotate-hint {
+  display: none;
+  position: absolute; inset: 0;
+  background: #0b0910;
+  color: #e8ddb8;
+  z-index: 50;
+  flex-direction: column; align-items: center; justify-content: center;
+  font-family: Georgia, 'Times New Roman', serif;
+  text-align: center; padding: 24px;
+}
+#rotate-hint .rot-icon { font-size: 64px; animation: spin 2.4s ease-in-out infinite; }
+@keyframes spin { 0%,20% { transform: rotate(0deg);} 60%,100% { transform: rotate(-90deg);} }
+
+@media (orientation: portrait) and (max-width: 700px) {
+  #rotate-hint { display: flex; }
+}

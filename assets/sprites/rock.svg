@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="105" viewBox="0 0 120 105">
+  <!-- Destructible boulder obstacle -->
+  <defs>
+    <linearGradient id="rk" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#a49584"/><stop offset="0.55" stop-color="#7d6f5e"/><stop offset="1" stop-color="#54483a"/>
+    </linearGradient>
+  </defs>
+  <path d="M14 96 C4 84 4 62 14 44 C22 28 40 14 60 12 C80 10 100 22 108 40 C116 58 114 80 104 94 C88 104 34 104 14 96 Z" fill="url(#rk)"/>
+  <path d="M36 30 L58 22 L54 44 Z" fill="#baa992" opacity="0.7"/>
+  <path d="M48 52 L72 44 M60 66 L84 60 M28 66 L46 74" stroke="#4c4034" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M70 26 C80 30 90 40 94 52" stroke="#c4b49c" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <ellipse cx="60" cy="99" rx="52" ry="6" fill="#000" opacity="0.22"/>
+</svg>

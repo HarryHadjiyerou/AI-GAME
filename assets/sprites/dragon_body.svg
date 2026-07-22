@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="360" viewBox="0 0 320 360">
+  <!-- Varkhul: black-scaled dragon with crimson crest & gold chest armor.
+       Faces left. Wings are a separate asset (dragon_wing.svg). -->
+  <defs>
+    <linearGradient id="scale" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d3a45"/><stop offset="1" stop-color="#17151d"/>
+    </linearGradient>
+    <linearGradient id="dbelly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8c7a52"/><stop offset="1" stop-color="#57492e"/>
+    </linearGradient>
+    <linearGradient id="dgold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8c469"/><stop offset="1" stop-color="#9c7226"/>
+    </linearGradient>
+    <linearGradient id="crest" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c43a2a"/><stop offset="1" stop-color="#7c1c14"/>
+    </linearGradient>
+  </defs>
+  <!-- tail sweeping right -->
+  <path d="M180 250 C230 260 280 250 306 220 C312 214 316 206 314 200 C296 224 250 236 200 226 Z" fill="url(#scale)"/>
+  <path d="M300 224 L316 208 L318 222 Z" fill="url(#crest)"/>
+  <!-- far leg -->
+  <path d="M200 250 C210 274 214 300 210 330 L182 330 C184 302 182 278 176 258 Z" fill="#211e28"/>
+  <path d="M212 326 L180 326 L176 348 L188 344 L196 350 L204 344 L216 348 Z" fill="#38333f"/>
+  <!-- body -->
+  <path d="M96 160 C86 200 100 244 140 262 C180 278 224 264 240 228 C252 196 240 156 204 136 C164 118 110 124 96 160 Z" fill="url(#scale)"/>
+  <!-- belly plates -->
+  <path d="M108 200 C112 234 136 256 168 260 C150 264 124 258 110 240 C102 228 102 212 108 200 Z" fill="url(#dbelly)"/>
+  <!-- gold chest armor (like the war-plate in the reference art) -->
+  <path d="M112 168 C104 194 110 222 128 240 C144 248 162 246 172 236 C178 214 172 188 156 172 C142 162 122 160 112 168 Z" fill="url(#dgold)"/>
+  <path d="M118 178 C114 198 118 218 130 232 M146 172 C156 188 162 208 158 228" stroke="#7c581c" stroke-width="4" fill="none"/>
+  <path d="M124 170 L136 200 L120 196 Z" fill="url(#crest)"/>
+  <!-- red back crest spines -->
+  <path d="M112 140 L100 116 L126 130 L124 104 L148 126 L154 100 L172 128 L188 110 L196 134 L214 124 L212 146 Z" fill="url(#crest)"/>
+  <!-- near leg with talons -->
+  <path d="M136 252 C138 278 136 304 128 330 L156 334 C162 306 162 280 158 260 Z" fill="url(#scale)"/>
+  <path d="M124 326 L160 330 L166 352 L152 346 L142 354 L134 346 L120 350 Z" fill="#38333f"/>
+  <path d="M126 348 L120 358 M140 350 L138 360 M154 348 L158 358" stroke="#cfc4a4" stroke-width="5" stroke-linecap="round"/>
+  <!-- neck arching left -->
+  <path d="M100 168 C78 150 66 122 70 94 C74 74 88 60 106 56 L124 84 C110 92 104 106 108 124 C110 138 112 150 118 160 Z" fill="url(#scale)"/>
+  <path d="M76 130 L60 122 L74 112 L58 100 L74 94" stroke="none" fill="url(#crest)"/>
+  <!-- head -->
+  <path d="M28 62 C14 66 6 76 8 88 C10 98 20 104 34 104 C30 110 32 116 38 118 C50 122 66 118 78 108 C94 96 100 78 94 62 C88 48 72 40 54 42 C42 44 32 50 28 62 Z" fill="url(#scale)"/>
+  <!-- lower jaw open -->
+  <path d="M18 96 C28 108 48 114 64 110 L58 126 C42 130 24 122 14 108 Z" fill="#211e28"/>
+  <path d="M22 100 C34 110 50 114 62 110 L60 116 C46 120 30 114 20 106 Z" fill="#8c1c10"/>
+  <!-- teeth -->
+  <path d="M20 92 L23 100 L27 92 M32 98 L35 106 L39 97 M46 102 L49 110 L53 101 M60 102 L62 110 L66 101" stroke="#e8e0c8" stroke-width="3" fill="none" stroke-linejoin="round"/>
+  <path d="M24 108 L27 100 M40 112 L43 104 M56 114 L58 106" stroke="#e8e0c8" stroke-width="3" stroke-linecap="round"/>
+  <!-- snout ridge + nostril -->
+  <path d="M10 80 C16 74 26 70 36 70" stroke="#4a4552" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="16" cy="84" r="3" fill="#0c0a10"/>
+  <!-- burning eye -->
+  <path d="M48 66 L70 60 L68 74 L52 76 Z" fill="#1c1010"/>
+  <circle cx="59" cy="68" r="5.5" fill="#ffb63e"/>
+  <circle cx="59" cy="68" r="2.4" fill="#c92c12"/>
+  <!-- horns: long gold-tan swept back -->
+  <path d="M74 52 C90 34 112 24 136 24 C118 34 104 48 96 64 Z" fill="url(#dgold)"/>
+  <path d="M82 62 C98 50 118 44 138 46 C122 52 108 62 100 74 Z" fill="#b08c44"/>
+  <!-- small crest horns -->
+  <path d="M52 44 L48 28 L62 40 Z" fill="url(#dgold)"/>
+  <path d="M68 42 L70 26 L80 42 Z" fill="url(#dgold)"/>
+  <!-- red cheek frill -->
+  <path d="M78 66 L102 58 L96 76 L110 76 L94 90 L104 96 L84 98 Z" fill="url(#crest)"/>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="90" viewBox="0 0 300 90">
+  <!-- Floating rock platform with mossy top -->
+  <defs>
+    <linearGradient id="prk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a7b68"/><stop offset="1" stop-color="#4c4034"/>
+    </linearGradient>
+  </defs>
+  <!-- underside: inverted rocky teardrop -->
+  <path d="M16 26 C40 66 90 86 150 88 C210 86 260 66 284 26 Z" fill="url(#prk)"/>
+  <path d="M60 48 L82 66 M130 62 L150 80 M200 60 L220 70" stroke="#3a3028" stroke-width="3" opacity="0.6"/>
+  <!-- grassy top slab -->
+  <path d="M8 18 C60 6 240 6 292 18 C294 24 290 30 284 30 L16 30 C10 30 6 24 8 18 Z" fill="#5c9a4c"/>
+  <path d="M10 16 C70 8 230 8 290 16 C240 12 60 12 10 16 Z" fill="#7cba60"/>
+  <!-- grass tufts -->
+  <path d="M40 12 L44 2 L48 12 M120 10 L124 0 L128 10 M210 11 L214 1 L218 11 M264 13 L268 4 L272 13" stroke="#6fae54" stroke-width="3" fill="none" stroke-linejoin="round"/>
+  <!-- glowing runes keeping it aloft -->
+  <circle cx="80" cy="52" r="4" fill="#8fd8ff" opacity="0.9"/>
+  <circle cx="170" cy="66" r="3.4" fill="#8fd8ff" opacity="0.8"/>
+  <circle cx="236" cy="46" r="3.8" fill="#8fd8ff" opacity="0.85"/>
+</svg>

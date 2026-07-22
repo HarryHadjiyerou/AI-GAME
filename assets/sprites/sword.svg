@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="26" height="110" viewBox="0 0 26 110">
+  <!-- Longsword, blade up. Grip pivot ≈ (13, 96) — the game rotates around this. -->
+  <defs>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eef4fa"/><stop offset="0.5" stop-color="#c3d3e2"/><stop offset="0.55" stop-color="#8fa6ba"/><stop offset="1" stop-color="#b8c9da"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2d478"/><stop offset="1" stop-color="#b98c2f"/>
+    </linearGradient>
+  </defs>
+  <!-- blade -->
+  <path d="M13 2 L18.5 14 L17.5 74 L13 78 L8.5 74 L7.5 14 Z" fill="url(#blade)"/>
+  <!-- fuller line -->
+  <path d="M13 8 L13 72" stroke="#7e94a8" stroke-width="1.6"/>
+  <!-- glint -->
+  <path d="M10 16 L11.5 15 L10.8 46 L9.4 47 Z" fill="#ffffff" opacity="0.8"/>
+  <!-- crossguard -->
+  <path d="M2 78 C8 74 18 74 24 78 C24 81 22 83 20 83 L6 83 C4 83 2 81 2 78 Z" fill="url(#gold)"/>
+  <!-- grip -->
+  <rect x="10" y="83" width="6" height="17" rx="2.6" fill="#5a3b22"/>
+  <path d="M10 86 L16 88 M10 91 L16 93 M10 96 L16 98" stroke="#8a5c34" stroke-width="1.4"/>
+  <!-- pommel -->
+  <circle cx="13" cy="103.5" r="5" fill="url(#gold)"/>
+  <circle cx="11.5" cy="102" r="1.6" fill="#ffe9ad"/>
+</svg>

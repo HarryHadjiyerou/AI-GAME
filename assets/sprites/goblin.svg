@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="74" height="96" viewBox="0 0 74 96">
+  <!-- Goblin pawn with spear. Faces left (toward the hero). -->
+  <defs>
+    <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fb849"/><stop offset="1" stop-color="#5c7f2e"/>
+    </linearGradient>
+    <linearGradient id="rag" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a4a33"/><stop offset="1" stop-color="#4c2c1e"/>
+    </linearGradient>
+  </defs>
+  <!-- spear (angled toward hero) -->
+  <path d="M4 30 L46 66" stroke="#6e4a26" stroke-width="4" stroke-linecap="round"/>
+  <path d="M8 33 L1 21 L14 26 Z" fill="#aab8c2"/>
+  <!-- back arm gripping spear -->
+  <path d="M40 58 C36 56 30 50 26 46 L32 40 C36 44 42 50 46 54 Z" fill="url(#skin)"/>
+  <!-- legs -->
+  <path d="M28 74 C26 80 24 86 22 92 L31 94 C33 87 34 81 35 76 Z" fill="url(#skin)"/>
+  <path d="M44 74 C46 80 48 86 50 92 L41 94 C40 87 39 81 38 76 Z" fill="url(#skin)"/>
+  <!-- torso with ragged tunic -->
+  <path d="M26 46 C22 58 24 70 30 78 C38 82 46 80 50 74 C52 62 50 52 44 44 C38 40 30 40 26 46 Z" fill="url(#rag)"/>
+  <path d="M27 50 L49 62 M25 60 L47 72" stroke="#3a2015" stroke-width="2" opacity="0.6"/>
+  <!-- head: big ears, hooked nose, underbite -->
+  <ellipse cx="34" cy="26" rx="16" ry="14" fill="url(#skin)"/>
+  <path d="M48 20 L68 10 L54 28 Z" fill="#6e9138"/>
+  <path d="M20 24 L10 30 L22 32 Z" fill="#7ba03d"/>
+  <!-- nose -->
+  <path d="M22 26 L14 32 L24 33 Z" fill="#7ba33e"/>
+  <!-- eye (menacing red) -->
+  <circle cx="27" cy="22" r="4" fill="#ffd23e"/>
+  <circle cx="26" cy="22" r="2" fill="#c92c12"/>
+  <!-- mouth with teeth -->
+  <path d="M20 34 C26 39 36 40 44 36 L43 41 C35 45 25 43 19 38 Z" fill="#3a1610"/>
+  <path d="M24 36 L26 40 M31 38 L32 42 M38 38 L39 41" stroke="#e8e2c8" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- front arm -->
+  <path d="M30 48 C24 52 18 58 14 64 L20 70 C26 64 32 58 38 54 Z" fill="url(#skin)"/>
+</svg>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="130" height="88" viewBox="0 0 130 88">
+  <!-- Armored war-hog. Faces left, built to charge. -->
+  <defs>
+    <linearGradient id="hide" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a3b33"/><stop offset="1" stop-color="#2a201b"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a8f9c"/><stop offset="1" stop-color="#4e525e"/>
+    </linearGradient>
+    <linearGradient id="cloth" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a83226"/><stop offset="1" stop-color="#6e1e16"/>
+    </linearGradient>
+  </defs>
+  <!-- tail -->
+  <path d="M118 38 C126 34 128 42 122 46" stroke="#2a201b" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- legs -->
+  <path d="M34 62 L30 82 L40 84 L44 64 Z" fill="url(#hide)"/>
+  <path d="M96 62 L100 82 L90 84 L88 64 Z" fill="url(#hide)"/>
+  <path d="M52 64 L50 84 L60 85 L62 66 Z" fill="#3a2d26"/>
+  <path d="M80 64 L84 84 L74 85 L72 66 Z" fill="#3a2d26"/>
+  <!-- hooves -->
+  <path d="M28 80 L41 82 L40 88 L27 86 Z" fill="#191310"/>
+  <path d="M102 80 L89 82 L90 88 L103 86 Z" fill="#191310"/>
+  <!-- massive body -->
+  <path d="M18 46 C16 30 34 16 62 14 C90 12 114 22 118 40 C120 54 108 66 84 68 C56 70 24 66 18 46 Z" fill="url(#hide)"/>
+  <!-- bristly back fur -->
+  <path d="M40 16 L44 8 L50 15 L56 6 L62 14 L70 7 L74 14 L82 9 L86 16" stroke="#241a15" stroke-width="4" fill="none" stroke-linejoin="round"/>
+  <!-- armor: spiked back plates + red war-cloth -->
+  <path d="M34 20 C54 10 88 10 108 26 L104 40 C84 28 56 26 38 34 Z" fill="url(#plate)"/>
+  <path d="M46 26 L44 14 L54 22 M64 20 L64 8 L72 20 M84 22 L88 10 L94 24" stroke="#c9ccd4" stroke-width="3.4" fill="none" stroke-linejoin="round"/>
+  <path d="M60 32 C74 30 90 34 100 42 L96 58 C84 50 70 48 58 50 Z" fill="url(#cloth)"/>
+  <path d="M72 38 L82 48 M82 38 L72 48" stroke="#e8dcc8" stroke-width="2.6"/>
+  <!-- rivet strap -->
+  <path d="M56 18 C58 34 58 50 56 64" stroke="#5c4630" stroke-width="5" fill="none"/>
+  <circle cx="56" cy="24" r="2" fill="#c9a24a"/><circle cx="57" cy="40" r="2" fill="#c9a24a"/><circle cx="56" cy="56" r="2" fill="#c9a24a"/>
+  <!-- armored head with face plate -->
+  <path d="M4 42 C2 30 12 20 28 20 C40 20 46 28 46 40 C46 52 38 60 24 60 C12 60 6 52 4 42 Z" fill="url(#plate)"/>
+  <path d="M8 28 L2 18 M20 22 L18 10" stroke="#c9ccd4" stroke-width="3.6" stroke-linecap="round"/>
+  <!-- snout -->
+  <path d="M2 46 C0 40 2 36 8 36 C14 36 16 40 15 46 C14 51 10 53 6 52 C3 51 2 49 2 46 Z" fill="#c98a80"/>
+  <circle cx="6" cy="42" r="1.8" fill="#5c2c24"/><circle cx="11" cy="42" r="1.8" fill="#5c2c24"/>
+  <!-- tusks -->
+  <path d="M10 52 C6 60 10 66 18 64 C14 60 13 56 15 52 Z" fill="#e8dfc4"/>
+  <path d="M30 54 C28 62 32 68 40 66 C36 61 35 57 36 53 Z" fill="#e8dfc4"/>
+  <!-- eye through visor slit -->
+  <path d="M22 32 L36 30 L36 36 L22 38 Z" fill="#1c1410"/>
+  <circle cx="28" cy="34" r="2.6" fill="#ff8c2e"/>
+</svg>
