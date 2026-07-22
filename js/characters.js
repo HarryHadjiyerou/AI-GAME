@@ -63,16 +63,21 @@ const ELF = {
   boot: '#5c4327', bootD: '#38270f',
 };
 
-/* pose: { runT, speedK, state, grounded, vy, attackT, combo, spinT, squash } */
+/* pose: { runT, time, speedK, moving, state, grounded, vy, attackT, attackDur,
+           heavy, charge, combo, spinT, squash } */
 function paintElf(ctx, p) {
   const P = ELF;
   const run = p.runT * 10.5;
+  const tabs = p.time !== undefined ? p.time : p.runT;      // absolute time for flutter
   const sliding = p.state === 'slide';
   const dead = p.state === 'dead';
   const air = !p.grounded;
-  const atkK = p.attackT > 0 ? 1 - p.attackT / 0.24 : -1;   // 0..1 during a swing
-  const up = p.combo === 1;
-  const big = p.combo === 2;
+  const dur = p.attackDur || 0.24;
+  const atkK = p.attackT > 0 ? 1 - p.attackT / dur : -1;    // 0..1 during a swing
+  const heavy = !!p.heavy && atkK >= 0;
+  const up = !heavy && p.combo === 1;
+  const big = heavy || p.combo === 2;
+  const idle = !p.moving && p.grounded && !sliding;
 
   ctx.save();
   if (p.squash) ctx.scale(p.squash.x, p.squash.y);
@@ -82,10 +87,11 @@ function paintElf(ctx, p) {
   if (p.spinT > 0) ctx.rotate(-Math.PI * 2 * (1 - p.spinT / 0.4));
 
   // body lean: forward with speed, back when rising, forward when diving
-  let lean = 0.1 + (p.speedK - 1) * 0.12;
+  let lean = idle ? 0.02 : 0.1 + (p.speedK - 1) * 0.12;
   if (air) lean = p.vy < 0 ? -0.12 : 0.2;
   if (sliding) lean = -1.22;
-  if (atkK >= 0) lean += 0.18 * Math.sin(atkK * Math.PI);
+  if (atkK >= 0) lean += (heavy ? 0.34 : 0.18) * Math.sin(atkK * Math.PI);
+  if (p.charge > 0.2 && atkK < 0) lean -= 0.1 * p.charge;   // coiling up for the heavy
   ctx.rotate(lean);
 
   const hipY = sliding ? -34 : -56;
@@ -93,22 +99,24 @@ function paintElf(ctx, p) {
   const bob = p.grounded && !sliding ? Math.abs(Math.sin(run)) * 4.5 : 0;
   ctx.translate(0, -bob * 0.6);
 
-  /* leg targets */
+  /* leg targets — feet lift while swinging FORWARD (cos > 0), plant coming back */
   let f1x, f1y, f2x, f2y, b1, b2;
   if (sliding) { f1x = 34; f1y = -4; f2x = -8; f2y = -2; b1 = 8; b2 = -10; }
   else if (air) {
     if (p.vy < -80) { f1x = 20; f1y = -26; f2x = -14; f2y = -8; b1 = 16; b2 = -14; }   // tuck
     else { f1x = 12; f1y = -6; f2x = -20; f2y = -16; b1 = 10; b2 = -16; }              // reach for ground
+  } else if (idle) {
+    f1x = 15; f1y = 0; f2x = -11; f2y = 0; b1 = 7; b2 = -7;                            // ready stance
   } else {
     const s1 = Math.sin(run), s2 = Math.sin(run + Math.PI);
-    f1x = s1 * 21; f1y = -Math.max(0, -Math.cos(run)) * 15;
-    f2x = s2 * 21; f2y = -Math.max(0, -Math.cos(run + Math.PI)) * 15;
+    f1x = s1 * 21; f1y = -Math.max(0, Math.cos(run)) * 15;
+    f2x = s2 * 21; f2y = -Math.max(0, Math.cos(run + Math.PI)) * 15;
     b1 = 9 + Math.max(0, -s1) * 9; b2 = 9 + Math.max(0, -s2) * 9;
   }
 
   /* cape (behind everything) — flowing tail with flutter */
   ctx.save();
-  const fl = Math.sin(p.runT * 12) * 6 + Math.sin(p.runT * 7.3) * 4;
+  const fl = Math.sin(tabs * 12) * 6 + Math.sin(tabs * 7.3) * 4;
   const capeLift = air ? (p.vy < 0 ? 26 : -18) : (sliding ? 30 : 6);
   ctx.fillStyle = (() => { const g = ctx.createLinearGradient(0, shY, -46, -10); g.addColorStop(0, P.cape); g.addColorStop(1, P.capeD); return g; })();
   ctx.strokeStyle = 'rgba(10,20,12,0.8)'; ctx.lineWidth = 3;
@@ -172,12 +180,14 @@ function paintElf(ctx, p) {
   /* front arm + sword */
   let ang;                       // sword angle: -up, 0 = forward
   if (atkK >= 0) {
-    const from = up ? 2.0 : -2.7, to = up ? -1.35 : (big ? 1.15 : 0.95);
-    const anticip = 0.12;        // brief pull-back before release
+    const from = up ? 2.0 : (heavy ? -3.1 : -2.7), to = up ? -1.35 : (heavy ? 1.3 : 0.95);
+    const anticip = heavy ? 0.22 : 0.12;   // heavies wind up visibly before release
     const k = atkK < anticip ? -atkK / anticip * 0.25 : (() => { const e = (atkK - anticip) / (1 - anticip); return 1 - Math.pow(1 - e, 3); })();
     ang = from + (to - from) * Math.max(0, k) + (k < 0 ? k * (up ? -1 : 1) : 0);
-  } else if (sliding) ang = 1.15;
+  } else if (p.charge > 0.2) ang = -2.2 - p.charge * 0.5;   // sword raised, gathering power
+  else if (sliding) ang = 1.15;
   else if (air) ang = -0.9;
+  else if (idle) ang = -0.5 + Math.sin(tabs * 2.2) * 0.04;
   else ang = -0.62 + Math.sin(run) * 0.07;
 
   const shoX = 5, shoYY = shY + 6;
@@ -193,14 +203,42 @@ function paintElf(ctx, p) {
   ctx.save();
   ctx.translate(hx, hy);
   ctx.rotate(ang + Math.PI / 2);   // asset points up; ang 0 = forward
-  if (atkK >= 0.1 && atkK < 0.8) { // motion ghosts while swinging
-    for (let gi = 1; gi <= 2; gi++) {
+  // charge glow: sapphire fire crawls up the blade while a heavy gathers
+  if (p.charge > 0.2 && atkK < 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const cg = ctx.createLinearGradient(0, 0, 0, -sh);
+    cg.addColorStop(0, 'rgba(80,160,255,0)');
+    cg.addColorStop(1, `rgba(140,210,255,${p.charge * 0.85})`);
+    ctx.fillStyle = cg;
+    ctx.fillRect(-swd, -sh - 6, swd * 2, sh + 6);
+    // sparks orbiting the blade
+    for (let i = 0; i < 4; i++) {
+      const sa = tabs * 9 + i * 1.9;
+      ctx.fillStyle = `rgba(190,230,255,${p.charge * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(Math.cos(sa) * 12, -sh * (0.3 + 0.16 * i) + Math.sin(sa) * 6, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (atkK >= 0.1 && atkK < 0.85) { // motion ghosts while swinging
+    for (let gi = 1; gi <= (heavy ? 3 : 2); gi++) {
       ctx.save();
-      ctx.rotate(-0.3 * gi * (up ? -1 : 1));
-      ctx.globalAlpha *= 0.5 - gi * 0.16;
+      ctx.rotate(-(heavy ? 0.42 : 0.3) * gi * (up ? -1 : 1));
+      ctx.globalAlpha *= 0.5 - gi * 0.13;
       ctx.drawImage(sw, -swd / 2, -sh + 13, swd, sh);
       ctx.restore();
     }
+  }
+  // heavy swings burn blue along the blade itself
+  if (heavy && atkK >= 0.15) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowColor = '#6ec8ff'; ctx.shadowBlur = 24;
+    ctx.globalAlpha *= 0.85;
+    ctx.drawImage(sw, -swd / 2, -sh + 13, swd, sh);
+    ctx.restore();
   }
   ctx.drawImage(sw, -swd / 2, -sh + 13, swd, sh);
   ctx.restore();
@@ -231,8 +269,8 @@ function paintGoblin(ctx, e) {
 
   // legs (walking left → mirror phases)
   const s1 = Math.sin(run), s2 = Math.sin(run + Math.PI);
-  const f1x = -s1 * 14, f1y = -Math.max(0, -Math.cos(run)) * 9;
-  const f2x = -s2 * 14, f2y = -Math.max(0, -Math.cos(run + Math.PI)) * 9;
+  const f1x = -s1 * 14, f1y = -Math.max(0, Math.cos(run)) * 9;
+  const f2x = -s2 * 14, f2y = -Math.max(0, Math.cos(run + Math.PI)) * 9;
   limb2(ctx, 2, hipY, f2x - 2, f2y, 8, 10, G.skinD, G.skinD);
   limb2(ctx, -2, hipY, f1x + 2, f1y, -8, 10.5, G.skin, G.skinD);
 
@@ -341,8 +379,8 @@ function paintTroll(ctx, e) {
   // legs — massive stomping trunks
   const s1 = Math.sin(run), s2 = Math.sin(run + Math.PI);
   const f1x = -s1 * 15, f2x = -s2 * 15;
-  limb2(ctx, 8, hipY, f2x + 4, -Math.max(0, -Math.cos(run + Math.PI)) * 8, 12, 16, T.skinD, T.skinD);
-  limb2(ctx, -6, hipY, f1x - 2, -Math.max(0, -Math.cos(run)) * 8, -12, 17, T.skin, T.skinD);
+  limb2(ctx, 8, hipY, f2x + 4, -Math.max(0, Math.cos(run + Math.PI)) * 8, 12, 16, T.skinD, T.skinD);
+  limb2(ctx, -6, hipY, f1x - 2, -Math.max(0, Math.cos(run)) * 8, -12, 17, T.skin, T.skinD);
   blob(ctx, f1x - 2, -3, 13, 7, 0, T.skinD, T.skinD);
   blob(ctx, f2x + 4, -3, 12, 6.5, 0, T.skinD, T.skinD);
 

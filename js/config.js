@@ -8,20 +8,25 @@
 const CFG = {
   W: 1280, H: 720,
   GROUND_Y: 610,           // top of the ground strip
+  TIERS: [610, 445, 285],  // multi-tier floors: ground, mid ledge, high ledge
   GRAVITY: 3400,           // used for ragdolls/projectiles
   GRAVITY_UP: 2500,        // player: floatier rise…
   GRAVITY_DOWN: 4400,      // …snappier fall = weighty, controllable jumps
   JUMP_VEL: -1150,
   COYOTE: 0.12,            // grace period after running off an edge
   INPUT_BUFFER: 0.16,      // early presses are queued, not eaten
-  SLIDE_TIME: 0.52,
+  SLIDE_TIME: 0.5,
   PLAYER: {
     hp: 100,
-    x: 300,                // fixed screen-x while running
+    x: 300,                // preferred screen-x (camera target, not a lock)
+    moveSpeed: 460,        // free left/right movement speed
     attackDamage: 34,
     attackRange: 150,
-    attackCooldown: 0.32,
+    attackCooldown: 0.3,
     comboWindow: 0.85,     // time to chain the next swing
+    heavyChargeTime: 0.55, // hold attack this long to unleash a heavy strike
+    heavyDamageMult: 2.4,
+    heavyRange: 205,
     invulnAfterHit: 1.0,
     powerPerHit: 9,
     powerPerKill: 16,
@@ -32,12 +37,12 @@ const CFG = {
     radiusBlast: { damage: 70,  radius: 330, name: 'Radius Blast' },
   },
   ENEMIES: {
-    goblin:   { hp: 40,  dmg: 10, speed: 90,  w: 74,  h: 96,  score: 50,
-                windup: 0.55, attackRange: 95, attackCd: 1.4 },
-    troll:    { hp: 110, dmg: 18, speed: 55,  w: 110, h: 150, score: 120,
-                windup: 0.85, attackRange: 125, attackCd: 2.0 },
-    hog:      { hp: 90,  dmg: 20, speed: 70,  w: 130, h: 88,  score: 150,
-                windup: 0.9,  chargeSpeed: 720, attackCd: 2.6 },
+    goblin:   { hp: 40,  dmg: 10, speed: 165, w: 74,  h: 96,  score: 50,
+                windup: 0.5,  attackRange: 95, attackCd: 1.2 },
+    troll:    { hp: 110, dmg: 18, speed: 100, w: 110, h: 150, score: 120,
+                windup: 0.8,  attackRange: 125, attackCd: 1.8 },
+    hog:      { hp: 90,  dmg: 20, speed: 125, w: 130, h: 88,  score: 150,
+                windup: 0.85, chargeSpeed: 780, attackCd: 2.3 },
   },
   // Mini-bosses are scaled named variants of base enemies.
   MINIBOSSES: {
@@ -50,13 +55,171 @@ const CFG = {
             lungeDmg: 22, fireDmg: 26, meteorDmg: 16 },
 };
 
-/* ---------- spawn-script helpers (used only at config time) ---------- */
-function _wave(x, type, n, gap) { const ev = []; for (let i = 0; i < n; i++) ev.push({ x: x + i * gap, t: type }); return ev; }
+/* ---------- spawn-script helpers (used only at config time) ----------
+   Event types:
+     goblin/troll/hog  enemies (optional tier: 0 ground, 1 mid, 2 high)
+     rock              destructible boulder (jump it or smash it)
+     bar               spiked barrier at head height — slide under it
+     gap               crevice in the ground — jump it or cross above
+     platform          small floating stepping-stone {y, w}
+     ledge             long tier floor {w, tier} — a second/third storey
+     heart             +25 hp pickup (optional tier)                       */
+function _wave(x, type, n, gap, tier) { const ev = []; for (let i = 0; i < n; i++) ev.push({ x: x + i * gap, t: type, tier }); return ev; }
 function _mix(...lists) { return [].concat(...lists).sort((a, b) => a.x - b.x); }
+function _bar(x) { return { x, t: 'bar' }; }
+function _ledge(x, w, tier) { return { x, t: 'ledge', w, tier }; }
+function _heart(x, tier) { return { x, t: 'heart', tier }; }
 
 /* Each level: name, subtitle, theme id (background renderer), music file,
-   run speed, level length in world px, and the spawn/obstacle script. */
-const LEVELS = [
+   scroll speed (camera, px/s), level length in world px, and the script.
+   Levels are hand-designed around routes: the tiers offer alternate paths
+   with their own enemies, hazards and rewards. */
+const LEVELS_V3 = [
+  { // ---------------- LEVEL 1 — bright verdant daylight ----------------
+    name: 'The Verdant Cliffs', sub: 'A realm of floating isles and waterfalls',
+    theme: 'verdant',
+    music: 'assets/music/level1_celtic_impulse.mp3',
+    musicName: 'Celtic Impulse — Kevin MacLeod',
+    speed: 118, length: 13500,
+    miniboss: 'goblinChief',
+    events: _mix(
+      // opening: learn to fight
+      _wave(1100, 'goblin', 2, 260),
+      // learn to slide
+      [_bar(2100)],
+      _wave(2600, 'goblin', 2, 240),
+      // learn to jump a crevice via a stepping stone
+      [{ x: 3500, t: 'gap', w: 300 }, { x: 3650, t: 'platform', y: 470, w: 210 }],
+      // first split route: high road has a heart guarded by a goblin,
+      // low road squeezes you under a barrier into a fight
+      [_ledge(4900, 1500, 1)],
+      [{ x: 5150, t: 'goblin', tier: 1 }, _heart(5750, 1)],
+      [_bar(5000), { x: 5500, t: 'goblin' }, { x: 5900, t: 'goblin' }],
+      // stepping stones over a wide crevice
+      [{ x: 7000, t: 'gap', w: 330 }, { x: 7100, t: 'platform', y: 460, w: 190 }],
+      _wave(7700, 'goblin', 3, 240),
+      // double slide gauntlet
+      [_bar(8800), _bar(9150)],
+      // the high road crosses the pit — the ground route needs a double jump
+      [_ledge(9900, 1300, 1), { x: 10250, t: 'gap', w: 330 }],
+      [{ x: 10100, t: 'goblin', tier: 1 }],
+      [{ x: 10900, t: 'rock' }],
+      _wave(11400, 'goblin', 3, 230),
+      [_heart(12300)],
+      _wave(12600, 'goblin', 2, 250),
+    ),
+  },
+  { // ---------------- LEVEL 2 — moonlit night forest ----------------
+    name: 'The Moonveil Woods', sub: 'Night falls — trolls wake beneath the twin moons',
+    theme: 'night',
+    music: 'assets/music/level2_lord_of_the_land.mp3',
+    musicName: 'Lord of the Land — Kevin MacLeod',
+    speed: 128, length: 15000,
+    miniboss: 'trollWarlord',
+    events: _mix(
+      _wave(1100, 'goblin', 2, 250),
+      [{ x: 2000, t: 'troll' }],
+      [_bar(2900)],
+      [{ x: 3400, t: 'gap', w: 320 }, { x: 3550, t: 'platform', y: 465, w: 200 }],
+      // twin-tier woods: goblins hold the branch road, a troll blocks the floor
+      [_ledge(4600, 1800, 1)],
+      _wave(4850, 'goblin', 2, 420, 1),
+      [{ x: 5000, t: 'troll' }, _bar(5700), _heart(6100, 1)],
+      _wave(6800, 'goblin', 3, 230),
+      // broken bridge: hop the stones or take the high branch
+      [_ledge(7900, 1400, 1), { x: 8100, t: 'gap', w: 300 }, { x: 8700, t: 'gap', w: 300 }],
+      [{ x: 8250, t: 'platform', y: 470, w: 180 }, { x: 8300, t: 'goblin', tier: 1 }],
+      [{ x: 9600, t: 'troll' }, { x: 10000, t: 'goblin' }],
+      [_bar(10700), _bar(11050)],
+      // triple-storey climb to a moonlit heart
+      [_ledge(11800, 1500, 1), _ledge(12250, 900, 2), _heart(12650, 2)],
+      [{ x: 12000, t: 'goblin', tier: 1 }, { x: 12500, t: 'goblin', tier: 1 }, { x: 12100, t: 'troll' }],
+      _wave(13600, 'goblin', 3, 230),
+      [{ x: 14300, t: 'troll' }],
+    ),
+  },
+  { // ---------------- LEVEL 3 — frozen mountain pass ----------------
+    name: 'The Frostfang Peaks', sub: 'A frozen pass where war-hogs stampede',
+    theme: 'frozen',
+    music: 'assets/music/level3_five_armies.mp3',
+    musicName: 'Five Armies — Kevin MacLeod',
+    speed: 138, length: 16000,
+    miniboss: 'frostmaw',
+    events: _mix(
+      _wave(1100, 'goblin', 2, 250),
+      [{ x: 1900, t: 'hog' }],
+      [_bar(2700), { x: 3100, t: 'troll' }],
+      // icefall crossing
+      [{ x: 3900, t: 'gap', w: 330 }, { x: 4050, t: 'platform', y: 460, w: 190 }],
+      // hogs stampede the valley floor — the ice shelf above is safer but guarded
+      [_ledge(4900, 2000, 1)],
+      [{ x: 5200, t: 'goblin', tier: 1 }, { x: 5900, t: 'goblin', tier: 1 }, _heart(6500, 1)],
+      [{ x: 5300, t: 'hog' }, { x: 6200, t: 'hog' }],
+      [_bar(7300)],
+      _wave(7800, 'goblin', 3, 230),
+      [{ x: 8800, t: 'troll' }, { x: 9300, t: 'hog' }],
+      // glacier chasm: stones below, shelf above, wind-blasted either way
+      [_ledge(10100, 1600, 1), { x: 10300, t: 'gap', w: 330 }, { x: 10950, t: 'gap', w: 300 }],
+      [{ x: 10450, t: 'platform', y: 470, w: 180 }, { x: 10500, t: 'goblin', tier: 1 }],
+      [_bar(11900), { x: 12300, t: 'hog' }],
+      // high twin shelves with a rich reward
+      [_ledge(13000, 1400, 1), _ledge(13400, 800, 2), _heart(13750, 2)],
+      [{ x: 13300, t: 'goblin', tier: 1 }, { x: 13600, t: 'goblin', tier: 2 }],
+      [{ x: 13900, t: 'troll' }],
+      _wave(14700, 'goblin', 3, 230),
+      [{ x: 15400, t: 'hog' }],
+    ),
+  },
+  { // ---------------- LEVEL 4 — stormy ashen wastes ----------------
+    name: 'The Ashen Wastes', sub: 'Storm-scarred lands at the dragon’s doorstep',
+    theme: 'storm',
+    music: 'assets/music/level4_stormfront.mp3',
+    musicName: 'Stormfront — Kevin MacLeod',
+    speed: 148, length: 17000,
+    miniboss: 'ashbrand',
+    events: _mix(
+      _wave(1000, 'goblin', 3, 230),
+      [{ x: 1900, t: 'hog' }, { x: 2400, t: 'troll' }],
+      [_bar(3100), _bar(3450)],
+      [{ x: 4100, t: 'gap', w: 330 }, { x: 4250, t: 'platform', y: 465, w: 180 }],
+      // war-camp: three storeys of fighting
+      [_ledge(5100, 2200, 1), _ledge(5700, 1000, 2)],
+      [{ x: 5400, t: 'goblin', tier: 1 }, { x: 6100, t: 'goblin', tier: 1 }, { x: 5950, t: 'goblin', tier: 2 }, _heart(6300, 2)],
+      [{ x: 5500, t: 'troll' }, { x: 6400, t: 'hog' }],
+      [_bar(7700)],
+      _wave(8200, 'goblin', 4, 220),
+      [{ x: 9400, t: 'hog' }, { x: 9900, t: 'troll' }],
+      // shattered causeway
+      [_ledge(10800, 1700, 1), { x: 11000, t: 'gap', w: 320 }, { x: 11650, t: 'gap', w: 320 }],
+      [{ x: 11150, t: 'platform', y: 470, w: 170 }, { x: 11200, t: 'goblin', tier: 1 }, { x: 11900, t: 'goblin', tier: 1 }],
+      [_bar(12800), { x: 13200, t: 'hog' }],
+      [{ x: 13900, t: 'troll' }, { x: 14300, t: 'troll' }],
+      [_ledge(14800, 1200, 1), _heart(15200, 1), { x: 15300, t: 'goblin', tier: 1 }],
+      _wave(15700, 'goblin', 4, 210),
+      [{ x: 16500, t: 'hog' }],
+    ),
+  },
+  { // ---------------- LEVEL 5 — hellish dragon arena ----------------
+    name: 'The Cinderthrone', sub: 'Face Varkhul, Tyrant of Embers',
+    theme: 'hell',
+    music: 'assets/music/level5_ritual.mp3',
+    musicName: 'Ritual — Kevin MacLeod',
+    speed: 150, length: 4600,           // short gauntlet run-in, then the arena
+    miniboss: null, boss: true,
+    events: _mix(
+      _wave(900, 'goblin', 3, 220),
+      [_bar(1800)],
+      [{ x: 2300, t: 'gap', w: 320 }, { x: 2450, t: 'platform', y: 465, w: 190 }],
+      [{ x: 3000, t: 'troll' }, { x: 3500, t: 'hog' }],
+      [_heart(4000)],
+    ),
+  },
+];
+
+const LEVELS = LEVELS_V3;
+
+/* legacy v2 straight-line scripts kept below for reference/tuning
+const LEVELS_V2 = [
   { // ---------------- LEVEL 1 — bright verdant daylight ----------------
     name: 'The Verdant Cliffs', sub: 'A realm of floating isles and waterfalls',
     theme: 'verdant',
@@ -184,5 +347,6 @@ const LEVELS = [
     ),
   },
 ];
+*/
 
 const STORAGE_KEY = 'elfblade_save_v1';

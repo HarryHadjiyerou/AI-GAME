@@ -47,10 +47,16 @@ class Player {
     this.bufAtk = 0;
     this.spinT = 0;                // double-jump flip animation
     this.lungeT = 0;               // forward step during a swing
+    this.face = 1;                 // 1 = right, -1 = left
+    this.vx = 0;                   // free horizontal movement
+    this.attackHeld = false;       // hold attack to charge a heavy strike
+    this.heavyT = 0;               // charge progress
+    this.attackDur = 0.24;         // current swing duration
+    this.heavy = false;            // current swing is a heavy
   }
 
   get hitTop() { return this.state === 'slide' ? this.y - 52 : this.y - this.h * 0.92; }
-  get swordX() { return this.worldX + 60; }
+  get swordX() { return this.worldX + 60 * this.face; }
   get swordY() { return this.y - this.h * 0.55; }
 
   jump() {
@@ -88,62 +94,90 @@ class Player {
     FX.puff(this.worldX + 20, this.y, 'rgba(210,210,190,0.5)', 6);
   }
 
-  attack(game) {
+  /* attack input: press = instant light slash; keep holding to charge,
+     and a heavy strike unleashes itself when the charge completes */
+  attackDown(game) {
     if (this.state === 'dead') return;
-    if (this.attackCd > 0) { this.bufAtk = CFG.INPUT_BUFFER; return; }   // buffer, don't eat
-    this.combo = (this.comboT > 0) ? (this.combo + 1) % 3 : 0;
-    this.comboT = CFG.PLAYER.comboWindow;
-    this.attackT = 0.24;
-    this.attackCd = CFG.PLAYER.attackCooldown * (this.combo === 2 ? 1.35 : 1);
-    this.lungeT = 0.14;            // step INTO the blow — weight comes from the hips
-    const up = this.combo === 1;
-    AudioMan.sfx(up ? 'swing2' : 'swing');
+    this.attackHeld = true;
+    this.heavyT = 0;
+    this._swing(game, false);
+  }
+  attackUp() { this.attackHeld = false; this.heavyT = 0; }
+  attack(game) { this._swing(game, false); }     // kept for buffered inputs
 
-    // slash visual — alternating arcs; third combo hit is a big golden roundhouse
-    const big = this.combo === 2;
-    FX.slash(this.swordX - 18, this.swordY, up ? -0.7 : -2.4, big ? 172 : 136, up, big ? '#ffd44f' : '#ffe9a8');
+  _swing(game, heavy) {
+    if (this.state === 'dead') return;
+    if (this.attackCd > 0) { if (!heavy) this.bufAtk = CFG.INPUT_BUFFER; return; }
+    const P = CFG.PLAYER;
+    this.heavy = heavy;
+    if (heavy) {
+      this.combo = 2;
+      this.attackDur = 0.34;                     // slower, bigger
+      this.attackCd = 0.55;
+    } else {
+      this.combo = (this.comboT > 0) ? (this.combo + 1) % 3 : 0;
+      if (this.combo === 2) this.combo = 0;      // the roundhouse now belongs to heavies
+      this.attackDur = 0.24;
+      this.attackCd = P.attackCooldown;
+    }
+    this.comboT = P.comboWindow;
+    this.attackT = this.attackDur;
+    this.lungeT = heavy ? 0.2 : 0.14;            // step INTO the blow
+    const up = !heavy && this.combo === 1;
+    AudioMan.sfx(heavy ? 'heavy' : up ? 'swing2' : 'swing');
 
-    // hit detection: everything in an arc ahead of the blade
-    const range = CFG.PLAYER.attackRange * (big ? 1.25 : 1);
-    const dmg = CFG.PLAYER.attackDamage * (big ? 1.6 : 1);
+    // slash visual — light burns red-gold, heavy burns blue
+    const trailCol = heavy ? '#6ec8ff' : '#ffb060';
+    FX.slash(this.worldX + 24 * this.face, this.swordY, up ? -0.7 : -2.4, heavy ? 195 : 136, up, trailCol, this.face);
+    if (heavy) {
+      FX.ring(this.worldX + 40 * this.face, this.swordY, '#9fdcff', 170, 0.32, 18);
+      FX.screenFlash('#8fd4ff', 0.18);
+    }
+
+    const range = heavy ? P.heavyRange : P.attackRange;
+    const dmg = P.attackDamage * (heavy ? P.heavyDamageMult : 1);
+    const sparkCol = heavy ? '#6ec8ff' : '#ff5a2e';       // red flames / blue flames
+    const sparkCol2 = heavy ? '#c8ecff' : '#ffb02e';
     let hitSomething = false;
+
+    const inArc = (wx, wy, extraW = 0, yTolUp = 220, yTolDown = 150) => {
+      const dx = (wx - this.worldX) * this.face;
+      return dx > -46 && dx < range + extraW && (this.y - wy < yTolDown && wy - this.y < yTolUp);
+    };
 
     for (const e of game.enemies) {
       if (e.dead) continue;
-      const dx = e.worldX - this.worldX;
-      if (dx > -40 && dx < range + e.def.w * 0.4 && (this.y - e.y < 150 && e.y - this.y < 220)) {
-        e.hurt(dmg, game, big);
+      if (inArc(e.worldX, e.y, e.def.w * 0.4)) {
+        e.hurt(dmg, game, heavy, sparkCol, sparkCol2);
         hitSomething = true;
       }
     }
     for (const o of game.obstacles) {
-      if (o.t === 'rock' && !o.dead) {
-        const dx = o.x - this.worldX;
-        if (dx > -30 && dx < range + 50) { o.hurt(dmg, game); hitSomething = true; }
-      }
+      if (o.t === 'rock' && !o.dead && inArc(o.x, CFG.GROUND_Y, 50)) { o.hurt(dmg, game); hitSomething = true; }
     }
     // deflect dragon fireballs with a well-timed swing
     for (const p of game.projectiles) {
-      if (p.hostile && !p.dead && Math.abs(p.x - this.swordX) < range && Math.abs(p.y - this.swordY) < 130) {
+      if (p.hostile && !p.dead && Math.abs(p.x - this.swordX) < range && Math.abs(p.y - this.swordY) < 140) {
         p.deflect();
         hitSomething = true;
       }
     }
     if (game.dragon && !game.dragon.dead) {
       const d = game.dragon;
-      if (Math.abs(d.headX - this.swordX) < range + 60 && d.headY > this.y - 260) {
+      if (Math.abs(d.headX - this.worldX) < range + 80 && d.headY > this.y - 280) {
         d.hurt(dmg, game);
         hitSomething = true;
       }
     }
 
     if (hitSomething) {
-      FX.stop(big ? 0.11 : 0.06);           // impact frames
-      FX.shake(big ? 12 : 7, 0.18);
-      FX.zoomPunch(big ? 1.4 : 0.7);        // camera bites into the hit
-      this.gainPower(CFG.PLAYER.powerPerHit);
+      FX.stop(heavy ? 0.15 : 0.06);         // impact frames
+      FX.shake(heavy ? 16 : 7, heavy ? 0.26 : 0.18);
+      FX.zoomPunch(heavy ? 2.2 : 0.7);      // camera bites into the hit
+      if (heavy) game.slowMo(0.4, 0.16);
+      this.gainPower(P.powerPerHit * (heavy ? 1.6 : 1));
     } else {
-      FX.shake(1.5, 0.05);                  // even a whiff moves air
+      FX.shake(heavy ? 4 : 1.5, 0.06);      // even a whiff moves air
     }
   }
 
@@ -198,20 +232,32 @@ class Player {
     if (this.bufJump > 0 && (this.grounded || this.coyote > 0 || this.jumpsLeft > 0)) { this.bufJump = 0; this.jump(); }
     if (this.bufAtk > 0 && this.attackCd <= 0) { this.bufAtk = 0; this.attack(game); }
 
-    // auto-run (stops in the boss arena)
-    if (!game.arenaMode) this.worldX += game.speed * dt;
-    else {
-      // arena: lunges step you in, then you drift back to your mark
-      const home = game.camX + CFG.PLAYER.x;
-      if (this.lungeT <= 0) this.worldX += (home - this.worldX) * dt * 2.5;
+    // free movement — the level scrolls, but the hero is yours to steer
+    const dir = Input.moveDir();
+    const targetVx = dir * CFG.PLAYER.moveSpeed * (this.state === 'slide' ? 0.8 : 1);
+    this.vx += (targetVx - this.vx) * Math.min(1, dt * 12);
+    if (dir !== 0) this.face = dir > 0 ? 1 : -1;
+    this.worldX += this.vx * dt;
+
+    // heavy charge: keep the button held and the big one unleashes itself
+    if (this.attackHeld && this.state !== 'dead') {
+      this.heavyT += dt;
+      if (this.heavyT >= CFG.PLAYER.heavyChargeTime && this.attackCd <= 0) {
+        this._swing(game, true);
+        this.heavyT = -0.45;               // brief rest before the next heavy
+      }
     }
+
+    // attack lunge adds a step of weight in the facing direction
     if (this.lungeT > 0) {
       this.lungeT -= dt;
-      const step = 320 * dt;
-      this.worldX += step;
-      if (game.arenaMode) this.worldX = Math.min(this.worldX, game.camX + CFG.W * 0.52);
+      this.worldX += 300 * dt * this.face;
     }
-    this.runT += dt * (game.speed / 250);
+
+    // stay inside the camera frame
+    this.worldX = Math.max(game.camX + 46, Math.min(game.camX + CFG.W - 80, this.worldX));
+
+    this.runT += dt * Math.abs(this.vx) / 300;
 
     // slide timer
     if (this.state === 'slide') {
@@ -287,13 +333,19 @@ class Player {
 
     ctx.save();
     ctx.translate(x, this.y);
+    ctx.scale(this.face, 1);               // face the way we're moving
     paintElf(ctx, {
       runT: this.runT,
-      speedK: Game.speed / 250,
+      time: performance.now() / 1000,
+      speedK: 1 + Math.abs(this.vx) / 600,
+      moving: Math.abs(this.vx) > 50,
       state: this.state,
       grounded: this.grounded,
       vy: this.vy,
       attackT: this.attackT,
+      attackDur: this.attackDur,
+      heavy: this.heavy,
+      charge: this.attackHeld ? Math.min(1, Math.max(0, this.heavyT / CFG.PLAYER.heavyChargeTime)) : 0,
       combo: this.combo,
       spinT: this.spinT,
       squash: this.squash,
@@ -306,7 +358,7 @@ class Player {
 
 /* ============================ ENEMIES ============================ */
 class Enemy {
-  constructor(type, worldX, mini) {
+  constructor(type, worldX, mini, tier) {
     this.type = type;
     this.def = { ...CFG.ENEMIES[type] };
     this.mini = mini || null;                 // miniboss config
@@ -317,8 +369,11 @@ class Enemy {
       this.def.hp = m.hp; this.def.dmg = m.dmg;
       this.tint = m.tint; this.name = m.name;
     }
+    this.tier = tier || 0;                    // which storey this enemy fights on
+    this.face = -1;                           // -1 = facing left (toward start)
     this.worldX = worldX;
-    this.y = CFG.GROUND_Y;
+    this.y = CFG.TIERS[this.tier];
+    this.baseY = this.y;
     this.hp = this.def.hp;
     this.maxHp = this.def.hp;
     this.dead = false;
@@ -335,18 +390,20 @@ class Enemy {
   get h() { return this.def.h * this.scale; }
   get w() { return this.def.w * this.scale; }
 
-  hurt(dmg, game, big) {
+  hurt(dmg, game, big, sparkCol, sparkCol2) {
     if (this.dead) return;
     this.hp -= dmg;
     this.flash = 0.12;
     this.hitSquash = 1;                        // visible crunch on the body
-    this.knock = big ? 260 : 160;
+    const kdir = game.player ? Math.sign(this.worldX - game.player.worldX) || 1 : 1;
+    this.knock = (big ? 260 : 160) * kdir;
     const sparkY = this.y - this.h * 0.55;
     const ichor = this.type === 'goblin' ? '#8fce5a' : this.type === 'troll' ? '#9fb36a' : '#5c5c68';
-    FX.spray(this.worldX - this.w * 0.3, sparkY, -0.5, 1.6, '#ffd970', big ? 22 : 12);
-    FX.spray(this.worldX, sparkY, -0.9, 2.2, ichor, big ? 14 : 8, 420);
+    // flame sparks: red for light hits, blue for heavies (per art direction)
+    FX.spray(this.worldX - this.w * 0.3 * kdir, sparkY, kdir > 0 ? -0.5 : Math.PI + 0.5, 1.6, sparkCol || '#ff5a2e', big ? 24 : 13);
+    FX.spray(this.worldX, sparkY, kdir > 0 ? -0.9 : Math.PI + 0.9, 2.2, sparkCol2 || '#ffb02e', big ? 16 : 9, 420);
     FX.burst(this.worldX, sparkY, ichor, 6, 300, 0.4);
-    FX.dmgText(this.worldX, this.y - this.h - 10, Math.round(dmg), big ? '#ffd44f' : '#fff1c9', big);
+    FX.dmgText(this.worldX, this.y - this.h - 10, Math.round(dmg), big ? '#8fd4ff' : '#fff1c9', big);
     AudioMan.sfx(this.type === 'hog' ? 'clang' : 'hit');
     if (this.hp <= 0) this.die(game);
   }
@@ -354,7 +411,8 @@ class Enemy {
   die(game) {
     this.dead = true;
     this.state = 'dying';
-    this.vx = 340 + Math.random() * 220;
+    const kdir = game.player ? Math.sign(this.worldX - game.player.worldX) || 1 : 1;
+    this.vx = (340 + Math.random() * 220) * kdir;
     this.vy = -620 - Math.random() * 240;
     this.rot = 0;
     AudioMan.sfx('kill');
@@ -381,36 +439,56 @@ class Enemy {
       return;
     }
 
-    if (this.knock > 0) { this.worldX += this.knock * dt * 3; this.knock -= dt * 600; }
+    if (this.knock !== 0) {
+      this.worldX += this.knock * dt * 3;
+      const s = Math.sign(this.knock);
+      this.knock -= s * dt * 600;
+      if (Math.sign(this.knock) !== s) this.knock = 0;
+    }
 
     const p = game.player;
-    const dist = this.worldX - p.worldX;
+    const dist = this.worldX - p.worldX;               // signed; + = enemy to the right
+    const adist = Math.abs(dist);
+    const dir = -Math.sign(dist) || -1;                // direction toward the player
+    const sameTier = Math.abs(this.y - p.y) < 90;
+    if (this.state !== 'charge') this.face = dir;
     if (this.attackCd > 0) this.attackCd -= dt;
 
+    // step toward the player, respecting ledge edges and crevices
+    const stepToward = (v) => {
+      const nx = this.worldX + dir * v * dt;
+      if (this.tier > 0) {
+        if (this.ledge && (nx < this.ledge.x0 || nx > this.ledge.x1)) return;   // hold the ledge
+      } else if (game.overGap(nx)) return;                                       // don't walk into pits
+      this.worldX = nx;
+    };
+
     if (this.type === 'hog') {
-      /* hog: telegraphed charge */
+      /* hog: telegraphed charge toward wherever you are */
       if (this.state === 'walk') {
-        this.worldX -= this.def.speed * dt;
-        if (dist < 640 && dist > 200 && this.attackCd <= 0) { this.state = 'windup'; this.stateT = this.def.windup; }
+        if (adist > 120) stepToward(this.def.speed);
+        if (adist < 660 && adist > 180 && sameTier && this.attackCd <= 0) { this.state = 'windup'; this.stateT = this.def.windup; this.chargeDir = dir; }
       } else if (this.state === 'windup') {
         this.stateT -= dt;
-        if (Math.random() < dt * 22) FX.puff(this.worldX + 30, this.y, 'rgba(200,190,180,0.7)', 2, 140);
-        if (this.stateT <= 0) { this.state = 'charge'; AudioMan.sfx('roar'); }
+        this.chargeDir = dir;                            // tracks you until it commits
+        if (Math.random() < dt * 22) FX.puff(this.worldX - 30 * this.chargeDir, this.y, 'rgba(200,190,180,0.7)', 2, 140);
+        if (this.stateT <= 0) { this.state = 'charge'; this.face = this.chargeDir; AudioMan.sfx('roar'); }
       } else if (this.state === 'charge') {
-        this.worldX -= this.def.chargeSpeed * this.scale * dt;
-        if (Math.random() < dt * 30) FX.puff(this.worldX + this.w * 0.5, this.y, 'rgba(200,190,180,0.6)', 2, 160);
+        this.worldX += this.chargeDir * this.def.chargeSpeed * this.scale * dt;
+        if (Math.random() < dt * 30) FX.puff(this.worldX - this.w * 0.5 * this.chargeDir, this.y, 'rgba(200,190,180,0.6)', 2, 160);
         // contact damage while charging
-        if (Math.abs(dist) < this.w * 0.5 + 30 && p.y > this.y - this.h - 10) p.takeDamage(this.def.dmg, game, this);
-        if (this.worldX < p.worldX - 700) {
-          if (this.mini) { this.worldX = p.worldX + 750; this.state = 'walk'; this.attackCd = 1.1; } // miniboss loops back
-          else this.gone = true;
+        if (adist < this.w * 0.5 + 30 && sameTier && p.y > this.y - this.h - 10) p.takeDamage(this.def.dmg, game, this);
+        if (Math.abs(this.worldX - p.worldX) > 780 || game.overGap(this.worldX)) {
+          if (this.mini) { this.state = 'walk'; this.attackCd = 1.0; this.worldX = game.nextSolidGround(this.worldX); }
+          else if (this.worldX < game.camX - 200 || this.worldX > game.camX + CFG.W + 200) this.gone = true;
+          else { this.state = 'walk'; this.attackCd = this.def.attackCd; }
         }
       }
     } else {
       /* goblin / troll: approach + telegraphed melee strike */
       if (this.state === 'walk') {
-        if (dist > this.def.attackRange * this.scale) this.worldX -= this.def.speed * dt;
-        if (dist <= this.def.attackRange * this.scale + 24 && this.attackCd <= 0) { this.state = 'windup'; this.stateT = this.def.windup; }
+        if (adist > this.def.attackRange * this.scale) stepToward(this.def.speed);
+        if (adist <= this.def.attackRange * this.scale + 24 && sameTier && this.attackCd <= 0) { this.state = 'windup'; this.stateT = this.def.windup; }
       } else if (this.state === 'windup') {
         this.stateT -= dt;
         if (this.stateT <= 0) {
@@ -421,9 +499,9 @@ class Enemy {
             FX.puff(this.worldX - this.w * 0.5, CFG.GROUND_Y, 'rgba(160,140,110,0.7)', 8, 200);
             AudioMan.sfx('land');
           }
-          if (dist < this.def.attackRange * this.scale + 40 && p.grounded && p.state !== 'slide')
+          if (Math.abs(this.worldX - p.worldX) < this.def.attackRange * this.scale + 40 && Math.abs(this.y - p.y) < 90 && p.grounded && p.state !== 'slide')
             p.takeDamage(this.def.dmg, game, this);
-          else if (dist < this.def.attackRange * this.scale + 40)
+          else if (Math.abs(this.worldX - p.worldX) < this.def.attackRange * this.scale + 40 && Math.abs(this.y - p.y) < 90)
             FX.dmgText(p.worldX, p.y - 160, 'DODGED!', '#9fe8ff');
         }
       } else if (this.state === 'strike') {
@@ -445,19 +523,20 @@ class Enemy {
       ctx.beginPath(); ctx.arc(x, this.y - this.h * 0.45, this.h * 0.8, 0, Math.PI * 2); ctx.fill();
     }
 
-    // contact shadow grounds the character
+    // contact shadow grounds the character on its own storey
     if (!this.dead) {
       ctx.save();
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.ellipse(x, CFG.GROUND_Y + 6, this.w * 0.42, 7 * this.scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x, this.baseY + 6, this.w * 0.42, 7 * this.scale, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
     ctx.save();
     ctx.translate(x, this.y);
     if (this.dead) { ctx.rotate(this.rot); ctx.globalAlpha = Math.max(0, 1 - this.deathT * 1.4); }
-    ctx.scale(this.scale, this.scale);
+    // painters face left natively; flip when the prey is on the other side
+    ctx.scale(this.scale * (this.face > 0 ? -1 : 1), this.scale);
     CHARACTER_PAINTERS[this.type](ctx, this);
     ctx.restore();
 
@@ -891,18 +970,19 @@ class Meteor {
 }
 
 class ForceBolt {
-  constructor(x, y) {
+  constructor(x, y, face = 1) {
     this.hostile = false;
     this.x = x; this.y = y;
+    this.face = face;
     this.dead = false;
     this.t = 0;
     this.hit = new Set();
   }
   update(dt, game) {
     this.t += dt;
-    this.x += CFG.SPECIALS.forceBolt.speed * dt;
+    this.x += CFG.SPECIALS.forceBolt.speed * dt * this.face;
     for (let i = 0; i < 3; i++)
-      FX.parts.push({ x: this.x - i * 26, y: this.y + (Math.random() - .5) * 26, vx: -160, vy: (Math.random() - .5) * 130, life: 0.35, t: 0, color: i ? '#5fb8ff' : '#d8f2ff', grav: 0, r: 8 + Math.random() * 8, glow: true });
+      FX.parts.push({ x: this.x - i * 26 * this.face, y: this.y + (Math.random() - .5) * 26, vx: -160 * this.face, vy: (Math.random() - .5) * 130, life: 0.35, t: 0, color: i ? '#5fb8ff' : '#d8f2ff', grav: 0, r: 8 + Math.random() * 8, glow: true });
     for (const e of game.enemies) {
       if (!e.dead && !this.hit.has(e) && Math.abs(e.worldX - this.x) < 70) {
         this.hit.add(e);
@@ -916,7 +996,7 @@ class ForceBolt {
       this.hit.add(game.dragon);
       game.dragon.hurt(CFG.SPECIALS.forceBolt.damage, game);
     }
-    if (this.x > game.camX + CFG.W + 200 || this.t > 2.4) this.dead = true;
+    if (this.x > game.camX + CFG.W + 200 || this.x < game.camX - 200 || this.t > 2.4) this.dead = true;
   }
   draw(ctx, camX) {
     const x = this.x - camX;
@@ -934,13 +1014,16 @@ class ForceBolt {
 
 class Obstacle {
   constructor(ev) {
-    this.t = ev.t;                   // rock | platform | heart
+    this.t = ev.t;                   // rock | platform | heart | bar | ledge
     this.x = ev.x;
-    this.w = ev.w || (ev.t === 'rock' ? 110 : 60);
-    this.y = ev.y || CFG.GROUND_Y;   // platform top for platforms
+    this.w = ev.w || (ev.t === 'rock' ? 110 : ev.t === 'bar' ? 90 : 60);
+    this.tier = ev.tier || 0;
+    this.y = ev.y || (ev.tier ? CFG.TIERS[ev.tier] : CFG.GROUND_Y);   // top surface
+    if (ev.t === 'ledge') this.drawY = this.y;
     this.hp = 60;
     this.dead = false;
     this.bobT = Math.random() * 7;
+    this.hitCd = 0;                  // bar re-hit cooldown
   }
   hurt(dmg, game) {
     if (this.t !== 'rock' || this.dead) return;
@@ -957,9 +1040,19 @@ class Obstacle {
   }
   update(dt, game) {
     this.bobT += dt;
+    if (this.hitCd > 0) this.hitCd -= dt;
     const p = game.player;
     if (this.dead) return;
-    if (this.t === 'rock') {
+    if (this.t === 'bar') {
+      // spiked barrier at head height: slide under it (or leap clean over)
+      if (this.hitCd <= 0 && Math.abs(this.x - p.worldX) < 38 && p.state !== 'slide' &&
+          p.y > CFG.GROUND_Y - 142) {
+        this.hitCd = 0.6;
+        p.takeDamage(8, game, this);
+        FX.spray(this.x, CFG.GROUND_Y - 100, p.face > 0 ? -2.6 : -0.5, 1.4, '#c8b090', 10);
+        AudioMan.sfx('clang');
+      }
+    } else if (this.t === 'rock') {
       // running into a rock: it shatters but stings
       if (Math.abs(this.x - p.worldX) < 52 && p.y > CFG.GROUND_Y - 74) {
         this.hurt(999, game);
@@ -981,6 +1074,86 @@ class Obstacle {
     if (x < -250 || x > CFG.W + 250) return;
     if (this.t === 'rock') {
       drawSprite(ctx, Assets.img.rock, x, CFG.GROUND_Y + 4, 86, {});
+    } else if (this.t === 'bar') {
+      // thorn-wrapped spiked beam held between two gnarled posts —
+      // the gap beneath it glows to say "slide through here"
+      const gy = CFG.GROUND_Y, top = gy - 146, bot = gy - 78;
+      ctx.save();
+      // inviting under-glow in the crawl space
+      const ug = ctx.createLinearGradient(0, bot, 0, gy);
+      ug.addColorStop(0, 'rgba(120,220,255,0.30)');
+      ug.addColorStop(1, 'rgba(120,220,255,0)');
+      ctx.fillStyle = ug;
+      ctx.fillRect(x - 46, bot + 6, 92, gy - bot - 6);
+      ctx.strokeStyle = '#3c2a16'; ctx.lineWidth = 12; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x - 54, gy); ctx.lineTo(x - 46, top + 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + 54, gy); ctx.lineTo(x + 46, top + 8); ctx.stroke();
+      const bg = ctx.createLinearGradient(0, top, 0, bot);
+      bg.addColorStop(0, '#6e4a26'); bg.addColorStop(1, '#38230f');
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = 'rgba(16,10,4,0.8)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(x - 52, top, 104, bot - top, 10); ctx.fill(); ctx.stroke();
+      // thorns bristling downward and outward
+      ctx.fillStyle = '#241708';
+      for (let i = -4; i <= 4; i++) {
+        const tx = x + i * 11;
+        ctx.beginPath(); ctx.moveTo(tx - 4, bot - 2); ctx.lineTo(tx, bot + 16); ctx.lineTo(tx + 4, bot - 2); ctx.closePath(); ctx.fill();
+        if (i % 2) { ctx.beginPath(); ctx.moveTo(tx - 4, top + 2); ctx.lineTo(tx, top - 12); ctx.lineTo(tx + 4, top + 2); ctx.closePath(); ctx.fill(); }
+      }
+      // warning rune glow so the read is instant
+      const pulse = 0.5 + 0.5 * Math.sin(this.bobT * 4);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255,120,40,${0.25 + pulse * 0.3})`;
+      ctx.beginPath(); ctx.arc(x, (top + bot) / 2, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.restore();
+    } else if (this.t === 'ledge') {
+      // thin enchanted stone causeway — a walkable storey that characters
+      // can pass beneath without clipping through it
+      const x0 = x - this.w / 2, x1 = x + this.w / 2, y0 = this.y;
+      const th = Game.bg ? Game.bg.theme : 'verdant';
+      const topCol = { verdant: '#5fae3e', night: '#2c4a72', frozen: '#eef7ff', storm: '#6a4a52', hell: '#3a1418' }[th];
+      const topHi  = { verdant: '#8fd45e', night: '#4a72a8', frozen: '#ffffff', storm: '#8a6068', hell: '#5c2228' }[th];
+      ctx.save();
+      // drop shadow separates the storey from the scenery behind it
+      const shg = ctx.createLinearGradient(0, y0 + 28, 0, y0 + 110);
+      shg.addColorStop(0, 'rgba(8,10,14,0.35)');
+      shg.addColorStop(1, 'rgba(8,10,14,0)');
+      ctx.fillStyle = shg;
+      ctx.fillRect(x0 + 14, y0 + 28, this.w - 28, 82);
+      // stone body
+      const bg = ctx.createLinearGradient(0, y0 - 6, 0, y0 + 26);
+      bg.addColorStop(0, '#8a7a64'); bg.addColorStop(1, '#4c4034');
+      ctx.fillStyle = bg;
+      ctx.strokeStyle = 'rgba(18,12,6,0.85)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.roundRect(x0, y0 - 6, this.w, 32, 12); ctx.fill(); ctx.stroke();
+      // stone seams + hanging tufts
+      ctx.strokeStyle = 'rgba(30,22,14,0.5)'; ctx.lineWidth = 2;
+      for (let sx = x0 + 90; sx < x1 - 40; sx += 130) {
+        ctx.beginPath(); ctx.moveTo(sx, y0 - 2); ctx.lineTo(sx + 8, y0 + 24); ctx.stroke();
+      }
+      // themed turf strip on top with a sunlit rim
+      const tg = ctx.createLinearGradient(0, y0 - 12, 0, y0 + 2);
+      tg.addColorStop(0, topHi); tg.addColorStop(1, topCol);
+      ctx.fillStyle = tg;
+      ctx.beginPath(); ctx.roundRect(x0 - 2, y0 - 12, this.w + 4, 14, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,248,210,0.5)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(x0 + 8, y0 - 11); ctx.lineTo(x1 - 8, y0 - 11); ctx.stroke();
+      // levitation runes glimmering along the underside
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let sx = x0 + 60; sx < x1 - 30; sx += 240) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.bobT * 2.2 + sx * 0.01);
+        const rg = ctx.createRadialGradient(sx, y0 + 30, 1, sx, y0 + 30, 14);
+        rg.addColorStop(0, `rgba(120,210,255,${0.5 + pulse * 0.4})`);
+        rg.addColorStop(1, 'rgba(120,210,255,0)');
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(sx, y0 + 30, 14, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      ctx.restore();
+      this.drawY = y0;
     } else if (this.t === 'platform') {
       const img = Assets.img.platform;
       const bob = Math.sin(this.bobT * 1.4) * 6;

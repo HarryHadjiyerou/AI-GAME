@@ -110,6 +110,10 @@ const AudioMan = {
     switch (name) {
       case 'swing':   this._noise(t, 0.16, 'bandpass', 900, 3600, 0.5); break;
       case 'swing2':  this._noise(t, 0.18, 'bandpass', 1400, 500, 0.5); break;
+      case 'heavy':
+        this._noise(t, 0.3, 'bandpass', 300, 1800, 0.8);
+        this._tone(t, 0.3, 'sawtooth', 90, 240, 0.5);
+        this._tone(t, 0.34, 'sine', 60, 34, 1.0); break;
       case 'hit':
         this._noise(t, 0.12, 'lowpass', 2400, 300, 0.9);
         this._tone(t, 0.1, 'square', 220, 90, 0.5);

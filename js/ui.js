@@ -107,6 +107,72 @@ const UI = {
     Input.zones.push({ id, x: cx - r * 1.15, y: cy - r * 1.15, w: r * 2.3, h: r * 2.3 });
   },
 
+  /* Fantasy virtual joystick: bronze dish, directional chevrons, gem knob. */
+  drawJoystick(ctx) {
+    const sc = Input.stickCenter;
+    const s = Input.stick;
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.translate(sc.x, sc.y);
+
+    // dish
+    let g = ctx.createRadialGradient(0, -8, 10, 0, 0, 84);
+    g.addColorStop(0, 'rgba(58,40,16,0.85)');
+    g.addColorStop(0.8, 'rgba(26,17,7,0.85)');
+    g.addColorStop(1, 'rgba(14,9,4,0.9)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 84, 0, Math.PI * 2); ctx.fill();
+    g = ctx.createLinearGradient(0, -84, 0, 84);
+    g.addColorStop(0, '#ffe9a4'); g.addColorStop(0.4, '#c9982e'); g.addColorStop(1, '#6e4614');
+    ctx.strokeStyle = g; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(0, 0, 82, 0, Math.PI * 2); ctx.stroke();
+
+    // directional chevrons: ← → move, ↓ slide
+    ctx.fillStyle = 'rgba(246,230,184,0.8)';
+    ctx.strokeStyle = 'rgba(246,230,184,0.8)';
+    ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const chev = (cx, cy, rot) => {
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+      ctx.beginPath(); ctx.moveTo(-9, 6); ctx.lineTo(0, -6); ctx.lineTo(9, 6); ctx.stroke();
+      ctx.restore();
+    };
+    chev(-56, 0, -Math.PI / 2);
+    chev(56, 0, Math.PI / 2);
+    chev(0, 56, Math.PI);
+    ctx.save();
+    ctx.font = '700 12px Georgia'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(246,230,184,0.6)';
+    ctx.fillText('SLIDE', 0, 76);
+    ctx.restore();
+
+    // gem knob follows the thumb
+    const kx = Math.max(-40, Math.min(40, (s.active ? s.dx : 0) * 40));
+    const ky = Math.max(-40, Math.min(40, (s.active ? s.dy : 0) * 40));
+    const kr = 34;
+    const glow = s.active ? 0.8 : 0.35 + 0.15 * Math.sin(t * 2.4);
+    ctx.save();
+    ctx.translate(kx, ky);
+    ctx.globalCompositeOperation = 'lighter';
+    const hg = ctx.createRadialGradient(0, 0, kr * 0.4, 0, 0, kr * 1.7);
+    hg.addColorStop(0, 'rgba(255,207,94,0)');
+    hg.addColorStop(0.6, `rgba(255,207,94,${glow * 0.35})`);
+    hg.addColorStop(1, 'rgba(255,207,94,0)');
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(0, 0, kr * 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    g = ctx.createLinearGradient(0, -kr, 0, kr);
+    g.addColorStop(0, '#ffe9a4'); g.addColorStop(0.5, '#d8ab4e'); g.addColorStop(1, '#8a5c1c');
+    ctx.strokeStyle = g; ctx.lineWidth = 5;
+    const kg = ctx.createRadialGradient(-8, -10, 4, 0, 0, kr);
+    kg.addColorStop(0, '#8a6a20'); kg.addColorStop(1, '#31230e');
+    ctx.fillStyle = kg;
+    ctx.beginPath(); ctx.arc(0, 0, kr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.beginPath(); ctx.ellipse(-8, -12, 13, 7, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+  },
+
   /* ---------- glowing icon painters ---------- */
   iconJump(ctx, R) {
     ctx.fillStyle = '#ffe9a4';
@@ -374,19 +440,28 @@ const UI = {
     this.gemButton(ctx, 'pause', CFG.W - 100, 42, 26, { base: '#31230e', baseHi: '#5c4520', glow: '#ffcf5e', icon: this.iconPause.bind(this), phase: 1 });
     this.gemButton(ctx, 'mute', CFG.W - 42, 42, 26, { base: '#31230e', baseHi: '#5c4520', glow: '#ffcf5e', icon: this.iconNote.bind(this), phase: 2 });
 
-    // touch controls — glowing gem buttons like the reference art
-    this.gemButton(ctx, 'jump', 96, CFG.H - 104, 58, {
+    // virtual joystick (move left/right, push down to slide) + jump gem above it
+    this.drawJoystick(ctx);
+    this.gemButton(ctx, 'jump', Input.stickCenter.x, CFG.H - 272, 48, {
       base: '#4a3208', baseHi: '#8a6a20', glow: '#ffb02e',
       icon: this.iconJump.bind(this), label: 'JUMP', phase: 0,
     });
-    this.gemButton(ctx, 'slide', 232, CFG.H - 88, 46, {
-      base: '#12304a', baseHi: '#2c5a80', glow: '#4fa8ff',
-      icon: this.iconSlide.bind(this), label: 'SLIDE', phase: 0.9,
-    });
     this.gemButton(ctx, 'attack', CFG.W - 112, CFG.H - 108, 66, {
       base: '#173420', baseHi: '#2e6338', glow: '#8fe842',
-      icon: this.iconSword.bind(this), label: 'ATTACK', phase: 1.7,
+      icon: this.iconSword.bind(this), label: 'HOLD = HEAVY', phase: 1.7,
     });
+    // heavy charge meter arcs around the attack gem
+    const chg = p.attackHeld ? Math.min(1, Math.max(0, p.heavyT / CFG.PLAYER.heavyChargeTime)) : 0;
+    if (chg > 0.05) {
+      ctx.save();
+      ctx.strokeStyle = chg >= 1 ? '#c8ecff' : '#6ec8ff';
+      ctx.shadowColor = '#6ec8ff'; ctx.shadowBlur = 18;
+      ctx.lineWidth = 7; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(CFG.W - 112, CFG.H - 108, 76, -Math.PI / 2, -Math.PI / 2 + chg * Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // special selector — two charged orbs fan out when the meter is full
     if (p.power >= CFG.PLAYER.powerMax) {
@@ -449,7 +524,7 @@ const UI = {
     this.button(ctx, 'levels', CFG.W / 2 - 150, CFG.H * 0.58 + 92, 300, 58, 'Choose Realm', { size: 22 });
     ctx.save();
     ctx.font = '400 15px Georgia'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(232,216,176,0.75)';
-    ctx.fillText('▲ jump · ▼ slide · ⚔ attack — swipe or use W/S + J', CFG.W / 2, CFG.H - 54);
+    ctx.fillText('joystick to move (push down to slide) · JUMP gem ×2 = double jump · tap ⚔ = light, hold = heavy — or A/D · W · S · J', CFG.W / 2, CFG.H - 54);
     ctx.fillText('Music: Kevin MacLeod (incompetech.com), CC-BY 4.0', CFG.W / 2, CFG.H - 28);
     ctx.restore();
   },

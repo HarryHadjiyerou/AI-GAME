@@ -69,11 +69,13 @@ const Game = {
     if (!fromCheckpoint) { this.score = 0; this.checkpoint = false; }
     FX.reset();
 
-    const startX = fromCheckpoint ? lv.length - 320 : 0;
+    const startX = fromCheckpoint ? this.bossCam() - 60 : 0;
     this.player.worldX = 300 + startX;
     this.camX = startX;
 
-    this.pending = lv.events.filter(e => e.t !== 'gap' && e.x > startX);
+    this.pending = lv.events.filter(e => e.t !== 'gap' && e.t !== 'ledge' && e.x > startX);
+    // ledges are static architecture — build every storey up front
+    for (const e of lv.events) if (e.t === 'ledge' && e.x > startX) this.obstacles.push(new Obstacle(e));
     // gaps are clamped to a width a double jump always clears
     this.gaps = lv.events.filter(e => e.t === 'gap' && e.x > startX).map(e => ({ x: e.x, w: Math.min(e.w, 330) }));
 
@@ -139,12 +141,15 @@ const Game = {
     let best = Infinity;
     if (!this.overGap(x) && curY <= CFG.GROUND_Y + 50) best = CFG.GROUND_Y;
     for (const o of this.obstacles) {
-      if (o.t !== 'platform' || o.dead) continue;
+      if ((o.t !== 'platform' && o.t !== 'ledge') || o.dead) continue;
       const top = o.drawY !== undefined ? o.drawY : o.y;
       if (Math.abs(x - o.x) < o.w / 2 + 14 && curY <= top + 26) best = Math.min(best, top);
     }
     return best === Infinity ? CFG.H + 200 : best;
   },
+
+  // camera position at which the boss gate opens
+  bossCam() { return LEVELS[this.levelIdx].length - CFG.W * 0.45; },
 
   nextSolidGround(x) {
     for (const g of this.gaps) if (x >= g.x - 10 && x <= g.x + g.w + 10) return g.x + g.w + 30;
@@ -152,8 +157,7 @@ const Game = {
   },
 
   get progress() {
-    const lv = LEVELS[this.levelIdx];
-    return Math.min(1, this.player ? (this.player.worldX - 300) / lv.length : 0);
+    return Math.min(1, this.camX / Math.max(1, this.bossCam()));
   },
 
   /* ---------------- input routing ---------------- */
@@ -174,7 +178,8 @@ const Game = {
     if (this.state === 'play') {
       if (a === 'jump') this.player.jump();      // double-tap = double jump
       else if (a === 'slide') this.player.slide();
-      else if (a === 'attack') this.player.attack(this);
+      else if (a === 'attackDown') this.player.attackDown(this);
+      else if (a === 'attackUp') this.player.attackUp();
       else if (a === 'special1') this._special('forceBolt');
       else if (a === 'special2') this._special('radiusBlast');
       else if (a === 'pause') { this.state = 'pause'; if (AudioMan.music) AudioMan.music.pause(); }
@@ -206,11 +211,16 @@ const Game = {
     const p = this.player;
     if (p.power < CFG.PLAYER.powerMax || p.state === 'dead') return;
     p.power = 0;
+    // anime-style cast moment: time crawls, camera bites in, speed lines flare
+    this.slowMo(0.25, 0.5);
+    FX.zoomPunch(2.8);
+    FX.speedLines(0.55);
+    AudioMan.duckMusic(0.4, 600);
     if (kind === 'forceBolt') {
       AudioMan.sfx('bolt');
-      this.projectiles.push(new ForceBolt(p.worldX + 50, p.y - p.h * 0.55));
+      this.projectiles.push(new ForceBolt(p.worldX + 50 * p.face, p.y - p.h * 0.55, p.face));
       FX.shake(7, 0.2);
-      FX.screenFlash('#7ac0ff', 0.2);
+      FX.screenFlash('#7ac0ff', 0.3);
     } else {
       AudioMan.sfx('blast');
       const R = CFG.SPECIALS.radiusBlast.radius;
@@ -239,6 +249,8 @@ const Game = {
     this._last = t;
     Input.zones = [];
     const ctx = this.ctx;
+
+    Input.joystickEnabled = this.state === 'play';
 
     if (this.state === 'loading') {
       ctx.fillStyle = '#0b0910'; ctx.fillRect(0, 0, CFG.W, CFG.H);
@@ -277,25 +289,34 @@ const Game = {
     const lv = LEVELS[this.levelIdx];
     const p = this.player;
 
+    // the world scrolls on its own — slow enough to fight, explore tiers, and route-pick
+    if (!this.arenaMode) this.camX += lv.speed * dt;
+
     p.update(dt, this);
-    if (!this.arenaMode) this.camX = p.worldX - CFG.PLAYER.x;
 
     // activate pending events as they scroll into view
     const spawnEdge = this.camX + CFG.W + 240;
     this.pending = this.pending.filter(ev => {
       if (ev.x > spawnEdge) return true;
-      if (ev.t === 'goblin' || ev.t === 'troll' || ev.t === 'hog') this.enemies.push(new Enemy(ev.t, ev.x));
+      if (ev.t === 'goblin' || ev.t === 'troll' || ev.t === 'hog') this.enemies.push(new Enemy(ev.t, ev.x, null, ev.tier));
       else if (ev.t !== 'gap') this.obstacles.push(new Obstacle(ev));
       return false;
     });
 
-    // reaching the end of the gauntlet triggers the boss
-    if (!this.bossSpawned && p.worldX - 300 >= lv.length) this._spawnBoss();
+    // the boss gate opens when the camera reaches the end of the gauntlet
+    if (!this.bossSpawned && this.camX >= this.bossCam()) this._spawnBoss();
 
-    for (const e of this.enemies) e.update(dt, this);
-    this.enemies = this.enemies.filter(e => !(e.gone || (e.dead && e.deathT > 1.3) || e.worldX < this.camX - 500));
+    for (const e of this.enemies) {
+      // bind tier enemies to the ledge they stand on
+      if (e.tier > 0 && !e.ledge) {
+        const l = this.obstacles.find(o => o.t === 'ledge' && o.tier === e.tier && Math.abs(e.worldX - o.x) < o.w / 2 + 20);
+        if (l) e.ledge = { x0: l.x - l.w / 2 + 30, x1: l.x + l.w / 2 - 30 };
+      }
+      e.update(dt, this);
+    }
+    this.enemies = this.enemies.filter(e => !(e.gone || (e.dead && e.deathT > 1.3) || e.worldX < this.camX - 700));
     for (const o of this.obstacles) o.update(dt, this);
-    this.obstacles = this.obstacles.filter(o => !(o.dead && o.t !== 'platform') && o.x > this.camX - 400);
+    this.obstacles = this.obstacles.filter(o => !(o.dead && o.t !== 'platform') && o.x + (o.w || 0) / 2 > this.camX - 400);
     for (const pr of this.projectiles) pr.update(dt, this);
     this.projectiles = this.projectiles.filter(pr => !pr.dead);
     if (this.dragon) {
@@ -349,7 +370,16 @@ const Game = {
     FX.draw(ctx, camX);
     ctx.restore();
 
+    // saturation grade: pushes the whole scene toward vivid anime color
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = 'hsl(0, 100%, 50%)';
+    ctx.fillRect(0, 0, CFG.W, CFG.H);
+    ctx.restore();
+
     FX.drawFlash(ctx);
+    FX.drawSpeedLines(ctx);
     // subtle film grain kills the "flat vector" look
     if (!this._grain) {
       const g = document.createElement('canvas');

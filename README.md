@@ -16,13 +16,26 @@ python3 -m http.server 8000     # then open http://localhost:8000
 
 ## Controls
 
+The level scrolls slowly on its own; **you steer the hero freely** within it.
+
 | Action | Touch | Keyboard |
 |---|---|---|
-| Jump / double jump | **JUMP** button, tap left half, or swipe up (tap again in the air) | `Space` / `W` / `↑` |
-| Slide / dodge | **SLIDE** button or swipe down | `S` / `↓` |
-| Sword attack (3-hit combo) | **⚔** button or tap right half | `J` / `X` / `F` / `Enter` |
-| Force Bolt / Radius Blast | tap the glowing icons (only when the power meter is full) | `1` / `2` |
-| Pause / mute | corner buttons | `P` or `Esc` / `M` |
+| Move left / right | virtual **joystick** (bottom-left) | `A`/`D` or `←`/`→` |
+| Slide / dodge | push the joystick **down**, or swipe down | `S` / `↓` |
+| Jump / double jump | **JUMP** gem above the joystick, or swipe up | `Space` / `W` / `↑` |
+| Light attack (red flame) | tap **⚔** | tap `J` / `X` |
+| Heavy attack (blue flame, 2.4×) | **hold ⚔** ~½s — the charge ring fills, then it unleashes | hold `J` / `X` |
+| Force Bolt / Radius Blast | tap the glowing orbs (when the power meter is full) | `1` / `2` |
+| Pause / mute | corner gems | `P` or `Esc` / `M` |
+
+## Multi-tier levels
+
+Levels are built in **storeys**: the ground floor plus floating stone
+causeways (mid and high tiers) you jump between. Routes diverge — a heart
+guarded on the high road while a spike barrier squeezes the low road; crevices
+crossed by stepping stones *or* by the causeway above; enemies patrol every
+tier and chase along their own floor. Spiked **barriers** must be slid under,
+**crevices** jumped (or double-jumped), **boulders** smashed or leapt.
 
 ## The five realms — each visually distinct
 

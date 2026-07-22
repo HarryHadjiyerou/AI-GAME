@@ -53,8 +53,34 @@ const FX = {
   },
 
   /* sword slash arc: drawn as a glowing crescent that sweeps & fades */
-  slash(x, y, angle, radius, flip, color = '#ffe9a8') {
-    this.trails.push({ x, y, angle, radius, flip, t: 0, life: 0.22, color });
+  slash(x, y, angle, radius, flip, color = '#ffe9a8', face = 1) {
+    this.trails.push({ x, y, angle, radius, flip, t: 0, life: 0.22, color, face });
+  },
+
+  lines: 0,
+  speedLines(dur) { this.lines = Math.max(this.lines, dur); },
+
+  drawSpeedLines(ctx) {
+    if (this.lines <= 0) return;
+    const a = Math.min(1, this.lines * 3);
+    ctx.save();
+    ctx.translate(CFG.W / 2, CFG.H / 2);
+    ctx.globalCompositeOperation = 'lighter';
+    const n = 26, seed = Math.floor(performance.now() / 50);
+    for (let i = 0; i < n; i++) {
+      const ang = (i / n) * Math.PI * 2 + ((seed * 37 + i * 61) % 100) / 260;
+      const inner = 190 + ((seed * 13 + i * 29) % 90);
+      const len = 260 + ((seed * 7 + i * 43) % 240);
+      const w = 6 + ((i * 17) % 12);
+      ctx.globalAlpha = a * 0.3;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang) * inner, Math.sin(ang) * inner);
+      ctx.lineTo(Math.cos(ang + 0.012) * (inner + len), Math.sin(ang + 0.012) * (inner + len) + w);
+      ctx.lineTo(Math.cos(ang - 0.012) * (inner + len), Math.sin(ang - 0.012) * (inner + len) - w);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
   },
 
   ring(x, y, color, maxR = 300, life = 0.4, width = 26) {
@@ -69,6 +95,7 @@ const FX = {
     if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) this.shakeAmp = 0; }
     this.flash = Math.max(0, this.flash - dt * 2.6);
     this.punch = Math.max(0, this.punch - dt * 6);
+    this.lines = Math.max(0, this.lines - dt);
     for (const p of this.parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.grav || 0) * dt; }
     this.parts = this.parts.filter(p => p.t < p.life);
     for (const s of this.trails) s.t += dt;
@@ -92,6 +119,7 @@ const FX = {
       const start = s.angle - (s.flip ? -0.4 : sweep - 0.4) + (s.flip ? -1 : 1) * k * 0.9;
       ctx.save();
       ctx.translate(s.x - camX, s.y);
+      if (s.face === -1) ctx.scale(-1, 1);     // mirror the arc when facing left
       ctx.globalAlpha = (1 - k);
       ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < 3; i++) {
