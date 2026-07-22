@@ -158,6 +158,7 @@ const Game = {
 
   /* ---------------- input routing ---------------- */
   onAction(a) {
+    UI.press(a);                        // tactile flash on whichever button fired
     if (a === 'mute') { AudioMan.toggleMute(); return; }
 
     if (this.state === 'title') {

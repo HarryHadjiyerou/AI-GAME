@@ -6,8 +6,191 @@
 
 const UI = {
   bannerText: null, bannerSub: null, bannerT: 0,
+  pressT: {},                 // button id -> time of last press (for tactile feedback)
 
   banner(text, sub, dur = 2.6) { this.bannerText = text; this.bannerSub = sub; this.bannerT = dur; },
+  press(id) { this.pressT[id] = performance.now(); },
+
+  /* Ornate circular "gem" button in the style of the reference art:
+     bronze bezel, gold rim, deep radial gem face, glossy highlight,
+     pulsing glow, and a squash-flash when pressed. */
+  gemButton(ctx, id, cx, cy, r, opts = {}) {
+    const now = performance.now();
+    const t = now / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.6 + (opts.phase || 0));
+    const pk = Math.max(0, 1 - (now - (this.pressT[id] || -1e9)) / 180);   // press anim 0..1
+    const R = r * (1 - pk * 0.1);
+    const glow = opts.glow || '#ffcf5e';
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // drop shadow grounds the button
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.ellipse(0, R * 0.16, R * 1.04, R * 1.02, 0, 0, Math.PI * 2); ctx.fill();
+
+    // ambient glow halo (breathes; flares when ready/pressed)
+    const halo = (opts.ready ? 0.85 : 0.35) + pulse * 0.25 + pk * 0.6;
+    const hg = ctx.createRadialGradient(0, 0, R * 0.6, 0, 0, R * 1.75);
+    hg.addColorStop(0, glow + '00');
+    hg.addColorStop(0.55, glow + Math.round(halo * 60).toString(16).padStart(2, '0'));
+    hg.addColorStop(1, glow + '00');
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(0, 0, R * 1.75, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // bronze bezel
+    let g = ctx.createLinearGradient(0, -R, 0, R);
+    g.addColorStop(0, '#8a6a30'); g.addColorStop(0.5, '#4a3312'); g.addColorStop(1, '#241708');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+
+    // gold rim
+    g = ctx.createLinearGradient(0, -R, 0, R);
+    g.addColorStop(0, '#ffe9a4'); g.addColorStop(0.35, '#d8ab4e'); g.addColorStop(0.7, '#8a5c1c'); g.addColorStop(1, '#e8c265');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = R * 0.13;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.9, 0, Math.PI * 2); ctx.stroke();
+
+    // gem face
+    const base = opts.base || '#1d3a24';
+    g = ctx.createRadialGradient(-R * 0.28, -R * 0.32, R * 0.1, 0, 0, R * 0.82);
+    g.addColorStop(0, opts.baseHi || '#3f7048');
+    g.addColorStop(0.72, base);
+    g.addColorStop(1, '#0a0d08');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.8, 0, Math.PI * 2); ctx.fill();
+
+    // inner lit rim (animates with the pulse)
+    ctx.strokeStyle = glow;
+    ctx.globalAlpha = 0.35 + pulse * 0.4 + pk * 0.3 + (opts.ready ? 0.25 : 0);
+    ctx.shadowColor = glow; ctx.shadowBlur = 10 + pulse * 10 + pk * 16;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.72, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    // icon, glowing
+    if (opts.icon) {
+      ctx.save();
+      ctx.shadowColor = glow;
+      ctx.shadowBlur = 12 + pulse * 12 + pk * 18;
+      opts.icon(ctx, R, pulse);
+      ctx.restore();
+    }
+
+    // glossy top highlight
+    g = ctx.createLinearGradient(0, -R * 0.75, 0, -R * 0.1);
+    g.addColorStop(0, 'rgba(255,255,255,0.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, -R * 0.42, R * 0.55, R * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // press flash ring
+    if (pk > 0) {
+      ctx.strokeStyle = `rgba(255,255,255,${pk * 0.8})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, R * (1.05 + (1 - pk) * 0.35), 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // caption under the button
+    if (opts.label) {
+      ctx.font = `700 ${Math.max(12, R * 0.26)}px Georgia`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(15,8,2,0.85)';
+      ctx.strokeText(opts.label, 0, R * 1.12);
+      ctx.fillStyle = '#f6e6b8';
+      ctx.fillText(opts.label, 0, R * 1.12);
+    }
+    ctx.restore();
+
+    Input.zones.push({ id, x: cx - r * 1.15, y: cy - r * 1.15, w: r * 2.3, h: r * 2.3 });
+  },
+
+  /* ---------- glowing icon painters ---------- */
+  iconJump(ctx, R) {
+    ctx.fillStyle = '#ffe9a4';
+    ctx.strokeStyle = '#ffe9a4';
+    ctx.lineWidth = R * 0.13; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.32, R * 0.1); ctx.lineTo(0, -R * 0.34); ctx.lineTo(R * 0.32, R * 0.1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.32, R * 0.42); ctx.lineTo(0, -0.02 * R); ctx.lineTo(R * 0.32, R * 0.42);
+    ctx.stroke();
+  },
+  iconSlide(ctx, R) {
+    ctx.strokeStyle = '#bfe4ff';
+    ctx.lineWidth = R * 0.13; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.32, -R * 0.34); ctx.lineTo(0, R * 0.1); ctx.lineTo(R * 0.32, -R * 0.34);
+    ctx.stroke();
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.32, 0.02 * R); ctx.lineTo(0, R * 0.44); ctx.lineTo(R * 0.32, 0.02 * R);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  },
+  iconSword(ctx, R) {
+    ctx.save();
+    ctx.rotate(-0.7);
+    // blade
+    let g = ctx.createLinearGradient(-R * 0.07, 0, R * 0.07, 0);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#dce9f4'); g.addColorStop(1, '#9fb6c8');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, -R * 0.56);
+    ctx.lineTo(R * 0.09, -R * 0.4); ctx.lineTo(R * 0.07, R * 0.16);
+    ctx.lineTo(0, R * 0.23); ctx.lineTo(-R * 0.07, R * 0.16); ctx.lineTo(-R * 0.09, -R * 0.4);
+    ctx.closePath(); ctx.fill();
+    // guard + grip + pommel
+    ctx.fillStyle = '#ffd76e';
+    ctx.beginPath(); ctx.roundRect(-R * 0.22, R * 0.2, R * 0.44, R * 0.09, R * 0.05); ctx.fill();
+    ctx.fillStyle = '#7a4c22';
+    ctx.beginPath(); ctx.roundRect(-R * 0.05, R * 0.28, R * 0.1, R * 0.24, R * 0.04); ctx.fill();
+    ctx.fillStyle = '#ffd76e';
+    ctx.beginPath(); ctx.arc(0, R * 0.58, R * 0.08, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  },
+  iconBolt(ctx, R, pulse) {
+    const g = ctx.createRadialGradient(0, 0, R * 0.05, 0, 0, R * 0.5);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.4, '#8fd4ff'); g.addColorStop(1, 'rgba(60,130,255,0.05)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,236,255,0.9)';
+    ctx.lineWidth = R * 0.06;
+    ctx.beginPath(); ctx.ellipse(0, 0, R * 0.52, R * 0.2, -0.6 + pulse * 0.15, 0, Math.PI * 2); ctx.stroke();
+  },
+  iconBlast(ctx, R, pulse) {
+    ctx.fillStyle = '#ffdf9a';
+    const spikes = 8;
+    ctx.beginPath();
+    for (let i = 0; i < spikes * 2; i++) {
+      const a = i * Math.PI / spikes - pulse * 0.2;
+      const rr = (i % 2 ? R * 0.24 : R * 0.52);
+      ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff9040';
+    ctx.beginPath(); ctx.arc(0, 0, R * 0.18, 0, Math.PI * 2); ctx.fill();
+  },
+  iconPause(ctx, R) {
+    ctx.fillStyle = '#f6e6b8';
+    ctx.beginPath(); ctx.roundRect(-R * 0.26, -R * 0.3, R * 0.18, R * 0.6, R * 0.06); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(R * 0.08, -R * 0.3, R * 0.18, R * 0.6, R * 0.06); ctx.fill();
+  },
+  iconNote(ctx, R) {
+    ctx.fillStyle = '#f6e6b8';
+    ctx.strokeStyle = '#f6e6b8';
+    ctx.lineWidth = R * 0.09; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(R * 0.12, -R * 0.34); ctx.lineTo(R * 0.12, R * 0.16); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-0.02 * R, R * 0.2, R * 0.17, R * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(R * 0.12, -R * 0.34); ctx.quadraticCurveTo(R * 0.36, -R * 0.26, R * 0.34, -R * 0.05); ctx.lineWidth = R * 0.07; ctx.stroke();
+    if (AudioMan.muted) {
+      ctx.strokeStyle = '#ff6a4a'; ctx.lineWidth = R * 0.1;
+      ctx.beginPath(); ctx.moveTo(-R * 0.34, -R * 0.34); ctx.lineTo(R * 0.38, R * 0.38); ctx.stroke();
+    }
+  },
 
   /* ---------- shared drawing helpers ---------- */
   panel(ctx, x, y, w, h, r = 18) {
@@ -92,23 +275,66 @@ const UI = {
     // health + power panel
     this.panel(ctx, 18, 16, 330, 92);
     ctx.save();
-    // portrait gem
-    ctx.beginPath(); ctx.arc(64, 62, 34, 0, Math.PI * 2);
-    const pg = ctx.createRadialGradient(56, 52, 4, 64, 62, 36);
-    pg.addColorStop(0, '#9fd8a8'); pg.addColorStop(1, '#1e5a32');
-    ctx.fillStyle = pg; ctx.fill();
-    ctx.lineWidth = 3.5; ctx.strokeStyle = '#c9a24a'; ctx.stroke();
-    ctx.fillStyle = '#0d2415';
-    ctx.font = '900 30px Georgia'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('❦', 64, 63);
+    // ornate circular portrait: layered gold rings around an elf cameo
+    const px0 = 64, py0 = 62;
+    let prg = ctx.createLinearGradient(px0, py0 - 40, px0, py0 + 40);
+    prg.addColorStop(0, '#ffe9a4'); prg.addColorStop(0.5, '#c9982e'); prg.addColorStop(1, '#7a5116');
+    ctx.strokeStyle = prg; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(px0, py0, 36, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#3a2708'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px0, py0, 40, 0, Math.PI * 2); ctx.stroke();
+    const pg = ctx.createRadialGradient(px0 - 10, py0 - 12, 4, px0, py0, 36);
+    pg.addColorStop(0, '#6aa8d8'); pg.addColorStop(1, '#173450');
+    ctx.fillStyle = pg;
+    ctx.beginPath(); ctx.arc(px0, py0, 33, 0, Math.PI * 2); ctx.fill();
+    // elf cameo: hair, face, ear
+    ctx.save();
+    ctx.beginPath(); ctx.arc(px0, py0, 33, 0, Math.PI * 2); ctx.clip();
+    // face
+    ctx.fillStyle = '#f2cba2';
+    ctx.beginPath(); ctx.ellipse(px0 + 3, py0 + 5, 14, 16, 0, 0, Math.PI * 2); ctx.fill();
+    // pointed ear poking left
+    ctx.fillStyle = '#eec19a';
+    ctx.beginPath(); ctx.moveTo(px0 - 9, py0 + 4); ctx.lineTo(px0 - 23, py0 - 1); ctx.lineTo(px0 - 8, py0 - 3); ctx.closePath(); ctx.fill();
+    // hair: crescent cap above the brow, swept back
+    ctx.fillStyle = '#f4e4a8';
+    ctx.beginPath();
+    ctx.moveTo(px0 + 17, py0 - 2);
+    ctx.quadraticCurveTo(px0 + 15, py0 - 20, px0 - 2, py0 - 19);
+    ctx.quadraticCurveTo(px0 - 19, py0 - 18, px0 - 20, py0 - 2);
+    ctx.quadraticCurveTo(px0 - 12, py0 - 10, px0 - 2, py0 - 9);
+    ctx.quadraticCurveTo(px0 + 10, py0 - 9, px0 + 17, py0 - 2);
+    ctx.closePath(); ctx.fill();
+    // eyes + mouth
+    ctx.fillStyle = '#274a70';
+    ctx.beginPath(); ctx.arc(px0 - 2, py0 + 3, 2, 0, Math.PI * 2); ctx.arc(px0 + 9, py0 + 3, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#c08a5e'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(px0 + 1, py0 + 12); ctx.quadraticCurveTo(px0 + 4, py0 + 14, px0 + 7, py0 + 12); ctx.stroke();
+    // green collar at the base
+    ctx.fillStyle = '#2e6338';
+    ctx.beginPath(); ctx.ellipse(px0 + 2, py0 + 30, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-    this.ornateBar(ctx, 112, 34, 216, 20, Math.max(0, p.hp / CFG.PLAYER.hp), '#a01818', '#ff5c44', `${Math.ceil(p.hp)} / ${CFG.PLAYER.hp}`);
+    // glass gleam
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.beginPath(); ctx.ellipse(px0 - 10, py0 - 14, 14, 8, -0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    this.ornateBar(ctx, 112, 34, 216, 20, Math.max(0, p.hp / CFG.PLAYER.hp), '#b81c14', '#ff6e50', `${Math.ceil(p.hp)} / ${CFG.PLAYER.hp}`);
     const pf = p.power / CFG.PLAYER.powerMax;
-    this.ornateBar(ctx, 112, 66, 216, 16, pf, '#155a8a', '#4fc0ff', pf >= 1 ? 'POWER READY!' : 'POWER');
+    this.ornateBar(ctx, 112, 66, 216, 16, pf, '#1a6aa8', '#5fd0ff', pf >= 1 ? 'POWER READY!' : 'POWER');
+    // shimmer sweep races along the power bar while charged
     if (pf >= 1) {
       ctx.save();
-      ctx.shadowColor = '#63ccff'; ctx.shadowBlur = 14 + Math.sin(performance.now() / 130) * 8;
-      ctx.strokeStyle = 'rgba(120,210,255,0.9)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(112, 66, 216, 16, 8); ctx.clip();
+      const sx = 112 + ((performance.now() / 6) % 260) - 30;
+      const sg = ctx.createLinearGradient(sx - 22, 0, sx + 22, 0);
+      sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.75)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(sx - 22, 62, 44, 24);
+      ctx.restore();
+      ctx.save();
+      ctx.shadowColor = '#63ccff'; ctx.shadowBlur = 16 + Math.sin(performance.now() / 130) * 9;
+      ctx.strokeStyle = 'rgba(140,220,255,0.95)'; ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.roundRect(108, 62, 224, 24, 12); ctx.stroke();
       ctx.restore();
     }
@@ -144,27 +370,34 @@ const UI = {
     ctx.fillStyle = '#ffd968'; ctx.fillText(`✦ ${game.score}`, CFG.W - 130, 40);
     ctx.restore();
 
-    // pause + mute buttons
-    this.button(ctx, 'pause', CFG.W - 106, 18, 40, 40, '❚❚', { size: 15 });
-    this.button(ctx, 'mute', CFG.W - 58, 18, 40, 40, AudioMan.muted ? '✕' : '♪', { size: 19 });
+    // pause + mute — small round gems, top-right
+    this.gemButton(ctx, 'pause', CFG.W - 100, 42, 26, { base: '#31230e', baseHi: '#5c4520', glow: '#ffcf5e', icon: this.iconPause.bind(this), phase: 1 });
+    this.gemButton(ctx, 'mute', CFG.W - 42, 42, 26, { base: '#31230e', baseHi: '#5c4520', glow: '#ffcf5e', icon: this.iconNote.bind(this), phase: 2 });
 
-    // touch controls (bottom corners)
-    const bh = 86;
-    this.button(ctx, 'jump', 24, CFG.H - bh - 20, 130, bh, 'JUMP ▲', { size: 24 });
-    this.button(ctx, 'slide', 168, CFG.H - bh - 20, 120, bh, 'SLIDE ▼', { size: 22 });
-    this.button(ctx, 'attack', CFG.W - 170, CFG.H - bh - 20, 146, bh, '⚔', { size: 44 });
+    // touch controls — glowing gem buttons like the reference art
+    this.gemButton(ctx, 'jump', 96, CFG.H - 104, 58, {
+      base: '#4a3208', baseHi: '#8a6a20', glow: '#ffb02e',
+      icon: this.iconJump.bind(this), label: 'JUMP', phase: 0,
+    });
+    this.gemButton(ctx, 'slide', 232, CFG.H - 88, 46, {
+      base: '#12304a', baseHi: '#2c5a80', glow: '#4fa8ff',
+      icon: this.iconSlide.bind(this), label: 'SLIDE', phase: 0.9,
+    });
+    this.gemButton(ctx, 'attack', CFG.W - 112, CFG.H - 108, 66, {
+      base: '#173420', baseHi: '#2e6338', glow: '#8fe842',
+      icon: this.iconSword.bind(this), label: 'ATTACK', phase: 1.7,
+    });
 
-    // special selector — appears only when the meter is full
+    // special selector — two charged orbs fan out when the meter is full
     if (p.power >= CFG.PLAYER.powerMax) {
-      const sy = CFG.H - bh - 130;
-      this.button(ctx, 'special1', CFG.W - 316, sy, 140, 92, '🔵', { glow: '#55bbff', size: 34 });
-      this.button(ctx, 'special2', CFG.W - 164, sy, 140, 92, '💥', { glow: '#ffb055', size: 34 });
-      ctx.save();
-      ctx.font = '700 15px Georgia'; ctx.textAlign = 'center'; ctx.fillStyle = '#cfe8ff';
-      ctx.fillText('FORCE BOLT', CFG.W - 246, sy + 78);
-      ctx.fillStyle = '#ffe0b8';
-      ctx.fillText('RADIUS BLAST', CFG.W - 94, sy + 78);
-      ctx.restore();
+      this.gemButton(ctx, 'special1', CFG.W - 96, CFG.H - 252, 46, {
+        base: '#0e2846', baseHi: '#1c4a7c', glow: '#55bbff', ready: true,
+        icon: this.iconBolt.bind(this), label: 'BOLT', phase: 0.4,
+      });
+      this.gemButton(ctx, 'special2', CFG.W - 236, CFG.H - 208, 46, {
+        base: '#4a1c08', baseHi: '#843414', glow: '#ff9040', ready: true,
+        icon: this.iconBlast.bind(this), label: 'BLAST', phase: 1.2,
+      });
     }
 
     // boss health bar
