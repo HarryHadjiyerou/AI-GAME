@@ -90,15 +90,15 @@ class LevelBackground {
   _paintMountains(g, w, h, r, top, c1, c2, snowCaps, capColor) {
     this._ridge(g, w, h, r, top + 60, c1, c2, true);
     if (snowCaps) {
-      // dab lighter caps along the upper ridge
+      // fine snow dabs high on the ridge — texture, not floating shapes
       g.fillStyle = capColor || '#fff';
-      for (let i = 0; i < 26; i++) {
-        const x = r() * w, y = top + r() * 120;
-        g.globalAlpha = 0.5 + r() * 0.4;
+      for (let i = 0; i < 60; i++) {
+        const x = r() * w, y = top + 20 + r() * 90;
+        g.globalAlpha = 0.25 + r() * 0.3;
         g.beginPath();
         g.moveTo(x, y);
-        g.lineTo(x + 26 + r() * 30, y + 40 + r() * 40);
-        g.lineTo(x - 26 - r() * 30, y + 40 + r() * 40);
+        g.lineTo(x + 8 + r() * 12, y + 14 + r() * 16);
+        g.lineTo(x - 8 - r() * 12, y + 14 + r() * 16);
         g.closePath(); g.fill();
       }
       g.globalAlpha = 1;
@@ -142,22 +142,35 @@ class LevelBackground {
       // distant fairytale castle, hazy against the sky
       const x = w * (0.3 + r() * 0.4), y = top + 6;
       g.save();
-      g.globalAlpha = 0.75;
+      g.globalAlpha = 0.55;
       g.fillStyle = '#7d9cb4';
+      const cy = y + 34;                        // sits low so hills anchor its base
       const tower = (tx, tw, th) => {
-        g.fillRect(tx, y - th, tw, th + 30);
-        g.beginPath(); g.moveTo(tx - 2, y - th); g.lineTo(tx + tw / 2, y - th - tw * 1.1); g.lineTo(tx + tw + 2, y - th); g.fill();
+        g.fillRect(tx, cy - th, tw, th + 30);
+        g.beginPath(); g.moveTo(tx - 2, cy - th); g.lineTo(tx + tw / 2, cy - th - tw * 1.1); g.lineTo(tx + tw + 2, cy - th); g.fill();
       };
       tower(x, 13, 44); tower(x + 22, 17, 64); tower(x + 48, 13, 38);
-      g.fillRect(x - 6, y - 18, 66, 30);       // keep wall
+      g.fillRect(x - 6, cy - 18, 66, 30);       // keep wall
       g.restore();
     }
     if (decor === 'trees') {
-      for (let i = 0; i < 24; i++) {
+      // dappled canopy clusters with sunlit tops
+      for (let i = 0; i < 20; i++) {
         const x = r() * w, y = top + 20 + r() * 80, s = 26 + r() * 34;
-        g.fillStyle = i % 2 ? '#2e6337' : '#356e3c';
-        g.beginPath(); g.arc(x, y - s, s * 0.62, 0, Math.PI * 2); g.fill();
-        g.fillRect(x - 3, y - s, 7, s);
+        const base = i % 2 ? '#2e6337' : '#356e3c';
+        g.fillStyle = '#274f2c';
+        g.fillRect(x - 3.5, y - s, 8, s);
+        g.fillStyle = base;
+        g.beginPath();
+        g.arc(x, y - s, s * 0.62, 0, Math.PI * 2);
+        g.arc(x - s * 0.42, y - s * 0.8, s * 0.42, 0, Math.PI * 2);
+        g.arc(x + s * 0.42, y - s * 0.82, s * 0.45, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = 'rgba(146,201,102,0.75)';   // sunlit dapple
+        g.beginPath();
+        g.arc(x + s * 0.18, y - s * 1.22, s * 0.32, 0, Math.PI * 2);
+        g.arc(x - s * 0.28, y - s * 1.02, s * 0.2, 0, Math.PI * 2);
+        g.fill();
       }
     }
   }

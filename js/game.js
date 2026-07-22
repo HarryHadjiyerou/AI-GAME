@@ -21,6 +21,9 @@ const Game = {
   winT: 0,
   save: { unlocked: 0, best: {} },
   _last: 0,
+  ts: 1, tsT: 0,          // slow-motion time scale on big kills
+  streak: 0, streakT: 0,  // kill streak
+  _grain: null,
 
   /* ---------------- boot ---------------- */
   init() {
@@ -71,7 +74,8 @@ const Game = {
     this.camX = startX;
 
     this.pending = lv.events.filter(e => e.t !== 'gap' && e.x > startX);
-    this.gaps = lv.events.filter(e => e.t === 'gap' && e.x > startX).map(e => ({ x: e.x, w: e.w }));
+    // gaps are clamped to a width a double jump always clears
+    this.gaps = lv.events.filter(e => e.t === 'gap' && e.x > startX).map(e => ({ x: e.x, w: Math.min(e.w, 330) }));
 
     this.state = 'play';
     AudioMan.playMusic(lv.music);
@@ -101,9 +105,18 @@ const Game = {
     }
   },
 
+  slowMo(scale, dur) { this.ts = Math.min(this.ts, scale); this.tsT = Math.max(this.tsT, dur); },
+
   onKill(e) {
     this.score += e.mini ? 500 : e.def.score;
     this.player.gainPower(CFG.PLAYER.powerPerKill * (e.mini ? 2 : 1));
+    // the payoff: time dips, camera bites in
+    FX.zoomPunch(e.mini ? 2.2 : 1.2);
+    this.slowMo(e.mini ? 0.25 : 0.45, e.mini ? 0.5 : 0.13);
+    this.streak++;
+    this.streakT = 2.2;
+    if (this.streak >= 2)
+      FX.dmgText(this.player.worldX + 40, this.player.y - 200, `${this.streak}× STREAK`, '#ffd44f', this.streak >= 4);
     if (e.mini) this.winT = 1.6;          // savour the kill, then victory
   },
 
@@ -158,7 +171,7 @@ const Game = {
       return;
     }
     if (this.state === 'play') {
-      if (a === 'jump') this.player.jump();
+      if (a === 'jump') this.player.jump();      // double-tap = double jump
       else if (a === 'slide') this.player.slide();
       else if (a === 'attack') this.player.attack(this);
       else if (a === 'special1') this._special('forceBolt');
@@ -242,10 +255,14 @@ const Game = {
 
     // gameplay states all render the world underneath
     if (this.state === 'play') {
+      // slow-motion recovery
+      if (this.tsT > 0) { this.tsT -= dt; if (this.tsT <= 0) this.ts = 1; }
+      const sdt = dt * this.ts;
       if (FX.hitStop > 0) FX.hitStop -= dt;   // impact frames: world freezes, feels crunchy
-      else this._update(dt);
-      FX.update(dt);
-      this.bg.update(dt);
+      else this._update(sdt);
+      FX.update(sdt);
+      this.bg.update(sdt);
+      if (this.streakT > 0) { this.streakT -= dt; if (this.streakT <= 0) this.streak = 0; }
     }
     this._render(ctx, dt);
 
@@ -297,6 +314,13 @@ const Game = {
   _render(ctx, dt) {
     const shk = FX.camOffset();
     ctx.save();
+    // camera punch: zoom bites toward the action on heavy hits
+    if (FX.punch > 0) {
+      const z = 1 + FX.punch * 0.045;
+      ctx.translate(CFG.W * 0.32, CFG.H * 0.62);
+      ctx.scale(z, z);
+      ctx.translate(-CFG.W * 0.32, -CFG.H * 0.62);
+    }
     ctx.translate(shk.x, shk.y);
     const camX = this.camX;
 
@@ -325,6 +349,26 @@ const Game = {
     ctx.restore();
 
     FX.drawFlash(ctx);
+    // subtle film grain kills the "flat vector" look
+    if (!this._grain) {
+      const g = document.createElement('canvas');
+      g.width = 160; g.height = 160;
+      const gc = g.getContext('2d');
+      const id = gc.createImageData(160, 160);
+      for (let i = 0; i < id.data.length; i += 4) {
+        const v = 100 + Math.random() * 90 | 0;
+        id.data[i] = id.data[i + 1] = id.data[i + 2] = v;
+        id.data[i + 3] = 255;
+      }
+      gc.putImageData(id, 0, 0);
+      this._grain = ctx.createPattern(g, 'repeat');
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = this._grain;
+    ctx.fillRect(0, 0, CFG.W, CFG.H);
+    ctx.restore();
     UI.vignette(ctx, this.bg.theme === 'hell' ? 0.55 : 0.3);
     if (this.state === 'play' || this.state === 'pause') UI.drawHUD(ctx, this);
     UI.drawBanner(ctx, dt);

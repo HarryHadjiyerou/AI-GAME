@@ -41,6 +41,12 @@ class Player {
     this.runT = 0;
     this.squash = { x: 1, y: 1 };
     this.onPlatform = null;
+    this.jumpsLeft = 1;            // air jumps remaining (double jump)
+    this.coyote = 0;               // grace time after leaving an edge
+    this.bufJump = 0;              // buffered inputs
+    this.bufAtk = 0;
+    this.spinT = 0;                // double-jump flip animation
+    this.lungeT = 0;               // forward step during a swing
   }
 
   get hitTop() { return this.state === 'slide' ? this.y - 52 : this.y - this.h * 0.92; }
@@ -49,15 +55,27 @@ class Player {
 
   jump() {
     if (this.state === 'dead') return;
-    if (this.grounded) {
+    if (this.grounded || this.coyote > 0) {
       this.vy = CFG.JUMP_VEL;
       this.grounded = false;
+      this.coyote = 0;
       this.onPlatform = null;
-      if (this.state === 'slide') this.state = 'run';
+      this.jumpsLeft = 1;
       this.state = 'jump';
       this.squash = { x: 0.82, y: 1.2 };
       AudioMan.sfx('jump');
       FX.puff(this.worldX, this.y, 'rgba(210,210,190,0.6)', 5);
+    } else if (this.jumpsLeft > 0) {
+      // double jump — flip with a burst of wind
+      this.jumpsLeft--;
+      this.vy = CFG.JUMP_VEL * 0.94;
+      this.spinT = 0.4;
+      this.state = 'jump';
+      AudioMan.sfx('jump');
+      FX.ring(this.worldX, this.y - 40, 'rgba(220,240,255,0.9)', 70, 0.28, 10);
+      FX.puff(this.worldX, this.y - 30, 'rgba(230,240,250,0.5)', 6, 140);
+    } else {
+      this.bufJump = CFG.INPUT_BUFFER;   // queue it — fires the moment we land
     }
   }
 
@@ -71,17 +89,19 @@ class Player {
   }
 
   attack(game) {
-    if (this.state === 'dead' || this.attackCd > 0) return;
+    if (this.state === 'dead') return;
+    if (this.attackCd > 0) { this.bufAtk = CFG.INPUT_BUFFER; return; }   // buffer, don't eat
     this.combo = (this.comboT > 0) ? (this.combo + 1) % 3 : 0;
     this.comboT = CFG.PLAYER.comboWindow;
     this.attackT = 0.24;
     this.attackCd = CFG.PLAYER.attackCooldown * (this.combo === 2 ? 1.35 : 1);
+    this.lungeT = 0.14;            // step INTO the blow — weight comes from the hips
     const up = this.combo === 1;
     AudioMan.sfx(up ? 'swing2' : 'swing');
 
     // slash visual — alternating arcs; third combo hit is a big golden roundhouse
     const big = this.combo === 2;
-    FX.slash(this.swordX - 18, this.swordY, up ? -0.7 : -2.4, big ? 150 : 118, up, big ? '#ffd44f' : '#ffe9a8');
+    FX.slash(this.swordX - 18, this.swordY, up ? -0.7 : -2.4, big ? 172 : 136, up, big ? '#ffd44f' : '#ffe9a8');
 
     // hit detection: everything in an arc ahead of the blade
     const range = CFG.PLAYER.attackRange * (big ? 1.25 : 1);
@@ -118,9 +138,12 @@ class Player {
     }
 
     if (hitSomething) {
-      FX.stop(big ? 0.09 : 0.05);           // impact frames
-      FX.shake(big ? 9 : 5, 0.16);
+      FX.stop(big ? 0.11 : 0.06);           // impact frames
+      FX.shake(big ? 12 : 7, 0.18);
+      FX.zoomPunch(big ? 1.4 : 0.7);        // camera bites into the hit
       this.gainPower(CFG.PLAYER.powerPerHit);
+    } else {
+      FX.shake(1.5, 0.05);                  // even a whiff moves air
     }
   }
 
@@ -158,6 +181,10 @@ class Player {
     if (this.attackT > 0) this.attackT -= dt;
     if (this.comboT > 0) this.comboT -= dt;
     if (this.invuln > 0) this.invuln -= dt;
+    if (this.coyote > 0) this.coyote -= dt;
+    if (this.spinT > 0) this.spinT -= dt;
+    if (this.bufJump > 0) this.bufJump -= dt;
+    if (this.bufAtk > 0) this.bufAtk -= dt;
     this.squash.x += (1 - this.squash.x) * dt * 10;
     this.squash.y += (1 - this.squash.y) * dt * 10;
 
@@ -167,8 +194,23 @@ class Player {
       return;
     }
 
+    // consume buffered inputs the moment they become legal
+    if (this.bufJump > 0 && (this.grounded || this.coyote > 0 || this.jumpsLeft > 0)) { this.bufJump = 0; this.jump(); }
+    if (this.bufAtk > 0 && this.attackCd <= 0) { this.bufAtk = 0; this.attack(game); }
+
     // auto-run (stops in the boss arena)
     if (!game.arenaMode) this.worldX += game.speed * dt;
+    else {
+      // arena: lunges step you in, then you drift back to your mark
+      const home = game.camX + CFG.PLAYER.x;
+      if (this.lungeT <= 0) this.worldX += (home - this.worldX) * dt * 2.5;
+    }
+    if (this.lungeT > 0) {
+      this.lungeT -= dt;
+      const step = 320 * dt;
+      this.worldX += step;
+      if (game.arenaMode) this.worldX = Math.min(this.worldX, game.camX + CFG.W * 0.52);
+    }
     this.runT += dt * (game.speed / 250);
 
     // slide timer
@@ -178,23 +220,26 @@ class Player {
       FX.puff(this.worldX - 30, this.y, 'rgba(200,200,185,0.35)', 1, 60);
     }
 
-    // gravity & landing
+    // gravity & landing — floaty rise, heavy fall
     const support = game.supportYAt(this.worldX, this.y);
     if (!this.grounded) {
-      this.vy += CFG.GRAVITY * dt;
+      this.vy += (this.vy < 0 ? CFG.GRAVITY_UP : CFG.GRAVITY_DOWN) * dt;
+      this.vy = Math.min(this.vy, 1650);
       this.y += this.vy * dt;
       if (this.vy > 0 && this.y >= support - 2 && support < CFG.H + 60) {
         this.y = support;
         this.vy = 0;
         this.grounded = true;
+        this.jumpsLeft = 1;
+        this.spinT = 0;
         if (this.state === 'jump') this.state = 'run';
-        this.squash = { x: 1.22, y: 0.8 };
+        this.squash = { x: 1.24, y: 0.78 };
         AudioMan.sfx('land');
         FX.puff(this.worldX, this.y, 'rgba(210,210,190,0.6)', 7);
       }
     } else {
-      // walked off an edge (gap or platform end)
-      if (support > this.y + 4) { this.grounded = false; this.vy = 0; this.state = 'jump'; }
+      // walked off an edge (gap or platform end) — coyote grace kicks in
+      if (support > this.y + 4) { this.grounded = false; this.vy = 0; this.state = 'jump'; this.coyote = CFG.COYOTE; }
       else this.y = support;
     }
 
@@ -226,45 +271,33 @@ class Player {
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(x, this.y - 66, 120, 0, Math.PI * 2); ctx.fill();
     }
-    if (this.invuln > 0 && Math.floor(this.invuln * 14) % 2 === 0 && this.state !== 'dead') ctx.globalAlpha = 0.45;
-
-    const bob = this.grounded && this.state === 'run' ? Math.abs(Math.sin(this.runT * 9)) * 7 : 0;
-    const lean = this.state === 'slide' ? -1.15 : (this.grounded ? Math.sin(this.runT * 9) * 0.045 + 0.06 : (this.vy < 0 ? -0.14 : 0.12));
-    const h = this.state === 'slide' ? this.h * 0.62 : this.h;
-    const dead = this.state === 'dead';
-
-    // body
-    drawSprite(ctx, Assets.img.elf, x, this.y - bob, h, {
-      rot: dead ? -1.4 : lean,
-      sq: this.squash,
-    });
-
-    // sword — its own asset so the swing can rotate fluidly around the grip
-    const swinging = this.attackT > 0;
-    const k = swinging ? 1 - this.attackT / 0.24 : 0;
-    const up = this.combo === 1;
-    let ang;
-    if (swinging) {
-      const from = up ? 1.9 : -2.6, to = up ? -1.2 : 0.9;   // radians
-      const e = 1 - Math.pow(1 - k, 3);                     // ease-out: fast start
-      ang = from + (to - from) * e;
-    } else {
-      ang = this.state === 'slide' ? 0.9 : -0.55 + Math.sin(this.runT * 9) * 0.06;
-    }
-    ctx.save();
-    ctx.translate(x + 34, this.y - bob - h * 0.52);
-    ctx.rotate(dead ? 1.2 : ang);
-    const sw = Assets.img.sword;
-    const sh = 110, ssc = sh / (sw.height || 110);
-    // motion ghost while swinging
-    if (swinging) {
+    // contact shadow (fades with altitude — sells the jump arc)
+    if (this.state !== 'dead') {
+      const alt = Math.max(0, CFG.GROUND_Y - this.y);
       ctx.save();
-      ctx.rotate(-0.35 * (up ? -1 : 1));
-      ctx.globalAlpha = 0.28;
-      ctx.drawImage(sw, -((sw.width || 24) * ssc) / 2, -sh + 14, (sw.width || 24) * ssc, sh);
+      ctx.globalAlpha = Math.max(0.06, 0.28 - alt / 900);
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(x, CFG.GROUND_Y + 6, Math.max(16, 34 - alt * 0.05), 6, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
-    ctx.drawImage(sw, -((sw.width || 24) * ssc) / 2, -sh + 14, (sw.width || 24) * ssc, sh);
+
+    if (this.invuln > 0 && Math.floor(this.invuln * 14) % 2 === 0 && this.state !== 'dead') ctx.globalAlpha = 0.45;
+
+    ctx.save();
+    ctx.translate(x, this.y);
+    paintElf(ctx, {
+      runT: this.runT,
+      speedK: Game.speed / 250,
+      state: this.state,
+      grounded: this.grounded,
+      vy: this.vy,
+      attackT: this.attackT,
+      combo: this.combo,
+      spinT: this.spinT,
+      squash: this.squash,
+    });
     ctx.restore();
 
     ctx.globalAlpha = 1;
@@ -306,10 +339,13 @@ class Enemy {
     if (this.dead) return;
     this.hp -= dmg;
     this.flash = 0.12;
-    this.knock = big ? 200 : 120;
+    this.hitSquash = 1;                        // visible crunch on the body
+    this.knock = big ? 260 : 160;
     const sparkY = this.y - this.h * 0.55;
-    FX.spray(this.worldX - this.w * 0.3, sparkY, -0.5, 1.6, '#ffd970', big ? 18 : 10);
-    FX.burst(this.worldX, sparkY, this.type === 'goblin' ? '#8fce5a' : this.type === 'troll' ? '#9fb36a' : '#c8c8d8', 6, 300, 0.4);
+    const ichor = this.type === 'goblin' ? '#8fce5a' : this.type === 'troll' ? '#9fb36a' : '#5c5c68';
+    FX.spray(this.worldX - this.w * 0.3, sparkY, -0.5, 1.6, '#ffd970', big ? 22 : 12);
+    FX.spray(this.worldX, sparkY, -0.9, 2.2, ichor, big ? 14 : 8, 420);
+    FX.burst(this.worldX, sparkY, ichor, 6, 300, 0.4);
     FX.dmgText(this.worldX, this.y - this.h - 10, Math.round(dmg), big ? '#ffd44f' : '#fff1c9', big);
     AudioMan.sfx(this.type === 'hog' ? 'clang' : 'hit');
     if (this.hp <= 0) this.die(game);
@@ -318,19 +354,23 @@ class Enemy {
   die(game) {
     this.dead = true;
     this.state = 'dying';
-    this.vx = 260 + Math.random() * 160;
-    this.vy = -520 - Math.random() * 200;
+    this.vx = 340 + Math.random() * 220;
+    this.vy = -620 - Math.random() * 240;
     this.rot = 0;
     AudioMan.sfx('kill');
-    FX.stop(this.mini ? 0.14 : 0.07);
-    FX.shake(this.mini ? 14 : 7, 0.25);
-    FX.burst(this.worldX, this.y - this.h * 0.5, '#ffd970', this.mini ? 30 : 14, 480, 0.6);
+    FX.stop(this.mini ? 0.16 : 0.09);
+    FX.shake(this.mini ? 16 : 9, 0.28);
+    const ichor = this.type === 'goblin' ? '#8fce5a' : this.type === 'troll' ? '#9fb36a' : '#5c5c68';
+    FX.burst(this.worldX, this.y - this.h * 0.5, '#ffd970', this.mini ? 34 : 16, 520, 0.6);
+    FX.burst(this.worldX, this.y - this.h * 0.5, ichor, this.mini ? 22 : 12, 460, 0.7);
+    FX.ring(this.worldX, this.y - this.h * 0.5, '#fff2c8', this.mini ? 200 : 120, 0.3, 14);
     game.onKill(this);
   }
 
   update(dt, game) {
     this.t += dt;
     if (this.flash > 0) this.flash -= dt;
+    if (this.hitSquash > 0) this.hitSquash = Math.max(0, this.hitSquash - dt * 7);
 
     if (this.dead) {
       this.deathT += dt;
@@ -375,6 +415,12 @@ class Enemy {
         this.stateT -= dt;
         if (this.stateT <= 0) {
           this.state = 'strike'; this.stateT = 0.18;
+          // the blow itself has presence, whether it lands or not
+          if (this.type === 'troll') {
+            FX.shake(6, 0.2);
+            FX.puff(this.worldX - this.w * 0.5, CFG.GROUND_Y, 'rgba(160,140,110,0.7)', 8, 200);
+            AudioMan.sfx('land');
+          }
           if (dist < this.def.attackRange * this.scale + 40 && p.grounded && p.state !== 'slide')
             p.takeDamage(this.def.dmg, game, this);
           else if (dist < this.def.attackRange * this.scale + 40)
@@ -390,13 +436,6 @@ class Enemy {
   draw(ctx, camX) {
     const x = this.worldX - camX;
     if (x < -300 || x > CFG.W + 400) return;
-    const img = Assets.img[this.type];
-    const bob = this.state === 'walk' ? Math.abs(Math.sin(this.t * 6)) * 5 : 0;
-    let rot = 0, alpha = 1;
-
-    if (this.dead) { rot = this.rot; alpha = Math.max(0, 1 - this.deathT * 1.4); }
-    else if (this.state === 'windup') rot = this.type === 'hog' ? -0.12 : 0.22;      // lean back = telegraph
-    else if (this.state === 'strike' || this.state === 'charge') rot = this.type === 'hog' ? 0.06 : -0.3;
 
     // miniboss aura
     if (this.mini && !this.dead) {
@@ -406,14 +445,32 @@ class Enemy {
       ctx.beginPath(); ctx.arc(x, this.y - this.h * 0.45, this.h * 0.8, 0, Math.PI * 2); ctx.fill();
     }
 
-    drawSprite(ctx, img, x, this.y - bob, this.h, { rot, alpha, flip: false });
+    // contact shadow grounds the character
+    if (!this.dead) {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(x, CFG.GROUND_Y + 6, this.w * 0.42, 7 * this.scale, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
 
-    // white hit-flash overlay
+    ctx.save();
+    ctx.translate(x, this.y);
+    if (this.dead) { ctx.rotate(this.rot); ctx.globalAlpha = Math.max(0, 1 - this.deathT * 1.4); }
+    ctx.scale(this.scale, this.scale);
+    CHARACTER_PAINTERS[this.type](ctx, this);
+    ctx.restore();
+
+    // white hit-flash: hot glow at the point of impact
     if (this.flash > 0 && !this.dead) {
       ctx.save();
-      ctx.globalAlpha = this.flash / 0.12 * 0.75;
       ctx.globalCompositeOperation = 'lighter';
-      drawSprite(ctx, img, x, this.y - bob, this.h, { rot });
+      const fa = this.flash / 0.12;
+      const g = ctx.createRadialGradient(x, this.y - this.h * 0.5, 4, x, this.y - this.h * 0.5, this.h * 0.55);
+      g.addColorStop(0, `rgba(255,246,220,${fa * 0.85})`);
+      g.addColorStop(1, 'rgba(255,246,220,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, this.y - this.h * 0.5, this.h * 0.55, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
@@ -904,9 +961,9 @@ class Obstacle {
     if (this.dead) return;
     if (this.t === 'rock') {
       // running into a rock: it shatters but stings
-      if (Math.abs(this.x - p.worldX) < 58 && p.y > CFG.GROUND_Y - 92) {
+      if (Math.abs(this.x - p.worldX) < 52 && p.y > CFG.GROUND_Y - 74) {
         this.hurt(999, game);
-        p.takeDamage(8, game, this);
+        p.takeDamage(5, game, this);
       }
     } else if (this.t === 'heart') {
       if (Math.abs(this.x - p.worldX) < 66 && p.y > this.y - 150) {
@@ -923,7 +980,7 @@ class Obstacle {
     const x = this.x - camX;
     if (x < -250 || x > CFG.W + 250) return;
     if (this.t === 'rock') {
-      drawSprite(ctx, Assets.img.rock, x, CFG.GROUND_Y + 4, 105, {});
+      drawSprite(ctx, Assets.img.rock, x, CFG.GROUND_Y + 4, 86, {});
     } else if (this.t === 'platform') {
       const img = Assets.img.platform;
       const bob = Math.sin(this.bobT * 1.4) * 6;

@@ -8,8 +8,12 @@
 const CFG = {
   W: 1280, H: 720,
   GROUND_Y: 610,           // top of the ground strip
-  GRAVITY: 3400,
-  JUMP_VEL: -1180,
+  GRAVITY: 3400,           // used for ragdolls/projectiles
+  GRAVITY_UP: 2500,        // player: floatier rise…
+  GRAVITY_DOWN: 4400,      // …snappier fall = weighty, controllable jumps
+  JUMP_VEL: -1150,
+  COYOTE: 0.12,            // grace period after running off an edge
+  INPUT_BUFFER: 0.16,      // early presses are queued, not eaten
   SLIDE_TIME: 0.52,
   PLAYER: {
     hp: 100,

@@ -112,13 +112,15 @@ const AudioMan = {
       case 'swing2':  this._noise(t, 0.18, 'bandpass', 1400, 500, 0.5); break;
       case 'hit':
         this._noise(t, 0.12, 'lowpass', 2400, 300, 0.9);
-        this._tone(t, 0.1, 'square', 220, 90, 0.5); break;
+        this._tone(t, 0.1, 'square', 220, 90, 0.5);
+        this._tone(t, 0.13, 'sine', 88, 42, 0.95); break;   // bass thump = weight
       case 'clang':
         this._tone(t, 0.22, 'triangle', 1150, 640, 0.55);
         this._noise(t, 0.1, 'highpass', 3000, 5000, 0.4); break;
       case 'kill':
         this._noise(t, 0.3, 'lowpass', 1800, 120, 0.9);
-        this._tone(t, 0.28, 'sawtooth', 300, 60, 0.5); break;
+        this._tone(t, 0.28, 'sawtooth', 300, 60, 0.5);
+        this._tone(t, 0.3, 'sine', 72, 26, 1.2); break;     // deep body-blow boom
       case 'hurt':
         this._tone(t, 0.25, 'sawtooth', 520, 130, 0.7);
         this._noise(t, 0.18, 'lowpass', 1500, 200, 0.6); break;

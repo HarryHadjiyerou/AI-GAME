@@ -18,7 +18,7 @@ python3 -m http.server 8000     # then open http://localhost:8000
 
 | Action | Touch | Keyboard |
 |---|---|---|
-| Jump | **JUMP** button, tap left half, or swipe up | `Space` / `W` / `↑` |
+| Jump / double jump | **JUMP** button, tap left half, or swipe up (tap again in the air) | `Space` / `W` / `↑` |
 | Slide / dodge | **SLIDE** button or swipe down | `S` / `↓` |
 | Sword attack (3-hit combo) | **⚔** button or tap right half | `J` / `X` / `F` / `Enter` |
 | Force Bolt / Radius Blast | tap the glowing icons (only when the power meter is full) | `1` / `2` |
@@ -35,6 +35,14 @@ python3 -m http.server 8000     # then open http://localhost:8000
 
 Each background is a layered parallax illustration (sky + 3 depth layers +
 ambient particle system + themed ground), pre-rendered to tiles for smooth 60fps.
+
+## Characters that move like creatures
+
+Every character is a fully articulated, animated body (`js/characters.js`):
+two-segment limbs with real run cycles, a cape and hair that stream with
+momentum, landing squash, double-jump flips, goblin ear-twitches, the troll's
+overhead club slam, the war-hog's gallop. Enemies telegraph with readable
+windups — glowing eyes, trembling, rearing back — before they strike.
 
 ## Combat feel ("juice")
 

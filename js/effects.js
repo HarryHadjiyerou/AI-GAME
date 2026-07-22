@@ -12,10 +12,12 @@ const FX = {
   shakeAmp: 0, shakeT: 0,
   hitStop: 0,      // seconds of frozen gameplay (impact frames)
   flash: 0, flashColor: '#fff',
+  punch: 0,        // camera zoom impulse on big hits
 
   reset() { this.parts = []; this.trails = []; this.rings = []; this.texts = []; this.shakeAmp = 0; this.hitStop = 0; this.flash = 0; },
 
   shake(amp, dur) { this.shakeAmp = Math.max(this.shakeAmp, amp); this.shakeT = Math.max(this.shakeT, dur); },
+  zoomPunch(a) { this.punch = Math.max(this.punch, a); },
   stop(sec) { this.hitStop = Math.max(this.hitStop, sec); },
   screenFlash(color, a) { this.flash = Math.max(this.flash, a); this.flashColor = color; },
 
@@ -66,6 +68,7 @@ const FX = {
   update(dt) {
     if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) this.shakeAmp = 0; }
     this.flash = Math.max(0, this.flash - dt * 2.6);
+    this.punch = Math.max(0, this.punch - dt * 6);
     for (const p of this.parts) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.grav || 0) * dt; }
     this.parts = this.parts.filter(p => p.t < p.life);
     for (const s of this.trails) s.t += dt;
@@ -89,21 +92,28 @@ const FX = {
       const start = s.angle - (s.flip ? -0.4 : sweep - 0.4) + (s.flip ? -1 : 1) * k * 0.9;
       ctx.save();
       ctx.translate(s.x - camX, s.y);
-      ctx.globalAlpha = (1 - k) * 0.95;
+      ctx.globalAlpha = (1 - k);
       ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < 3; i++) {
-        const rr = s.radius - i * 14;
+        const rr = s.radius - i * 15;
         const grad = ctx.createRadialGradient(0, 0, rr * 0.4, 0, 0, rr);
         grad.addColorStop(0, 'rgba(255,255,255,0)');
-        grad.addColorStop(0.75, s.color + (i === 0 ? 'ee' : '66'));
+        grad.addColorStop(0.75, s.color + (i === 0 ? 'ff' : '88'));
         grad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.strokeStyle = grad;
-        ctx.lineWidth = 20 - i * 5;
+        ctx.lineWidth = 27 - i * 6;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(0, 0, rr, start, start + sweep * (1 - k * 0.35), false);
         ctx.stroke();
       }
+      // hot white leading edge
+      ctx.strokeStyle = `rgba(255,255,255,${(1 - k) * 0.9})`;
+      ctx.lineWidth = 7;
+      const lead = start + sweep * (1 - k * 0.35);
+      ctx.beginPath();
+      ctx.arc(0, 0, s.radius - 8, lead - 0.5, lead, false);
+      ctx.stroke();
       ctx.restore();
     }
 
