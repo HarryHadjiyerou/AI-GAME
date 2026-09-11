@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>AVES</title>
+<link rel="stylesheet" href="./styles/ui.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- ══════════════ BOOT / LOADING ══════════════ -->
+<div id="boot" class="overlay">
+  <div class="boot-inner">
+    <div class="wordmark">AVES</div>
+    <div class="boot-bar"><div id="boot-fill"></div></div>
+    <div id="boot-status" class="boot-status">warming the thermals</div>
+  </div>
+</div>
+
+<!-- ══════════════ MENU ══════════════ -->
+<div id="menu" class="overlay hidden">
+  <div class="menu-grain"></div>
+
+  <header class="menu-head">
+    <div class="wordmark small">AVES</div>
+    <div class="tagline">four wings · four worlds · one horizon</div>
+  </header>
+
+  <div class="planet-stage">
+    <canvas id="planet"></canvas>
+  </div>
+
+  <nav class="bird-rail" id="bird-rail"><!-- cards injected --></nav>
+
+  <section class="bird-detail" id="bird-detail">
+    <div class="detail-col">
+      <h2 id="d-name">HAWK</h2>
+      <div id="d-world" class="detail-world">THE FOREST</div>
+      <p id="d-blurb" class="detail-blurb"></p>
+    </div>
+    <div class="detail-col stats" id="d-stats"><!-- bars injected --></div>
+  </section>
+
+  <div class="menu-foot">
+    <button id="launch" class="primary">TAKE FLIGHT</button>
+    <div class="foot-links">
+      <button class="ghost" id="open-settings">Settings</button>
+      <button class="ghost" id="open-controls">Controls</button>
+      <button class="ghost" id="open-credits">Credits</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ SETTINGS ══════════════ -->
+<div id="settings" class="overlay sheet hidden">
+  <div class="sheet-inner">
+    <h3>Settings</h3>
+
+    <label class="row">
+      <span>Graphics</span>
+      <select id="s-quality">
+        <option value="low">Low — long battery</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+        <option value="ultra">Ultra — desktop GPU</option>
+      </select>
+    </label>
+
+    <label class="row">
+      <span>Field of view <em id="s-fov-v">104°</em></span>
+      <input id="s-fov" type="range" min="75" max="125" step="1" value="104" />
+    </label>
+
+    <label class="row">
+      <span>Fisheye <em id="s-fish-v">0.30</em></span>
+      <input id="s-fish" type="range" min="0" max="1" step="0.01" value="0.30" />
+    </label>
+
+    <label class="row">
+      <span>Head motion <em id="s-head-v">1.00</em></span>
+      <input id="s-head" type="range" min="0" max="1.5" step="0.05" value="1" />
+    </label>
+
+    <label class="row">
+      <span>Tilt sensitivity <em id="s-tilt-v">1.00</em></span>
+      <input id="s-tilt" type="range" min="0.3" max="2.5" step="0.05" value="1" />
+    </label>
+
+    <label class="row checkbox"><input id="s-invert" type="checkbox" /><span>Invert pitch (tilt forward = climb)</span></label>
+    <label class="row checkbox"><input id="s-wings" type="checkbox" checked /><span>Show wings in peripheral vision</span></label>
+    <label class="row checkbox"><input id="s-hud" type="checkbox" checked /><span>Show HUD</span></label>
+    <label class="row checkbox"><input id="s-assets" type="checkbox" checked /><span>Stream photoreal assets (HDRI + PBR, ~8&nbsp;MB)</span></label>
+
+    <button class="primary wide" data-close="settings">Done</button>
+  </div>
+</div>
+
+<!-- ══════════════ CONTROLS ══════════════ -->
+<div id="controls" class="overlay sheet hidden">
+  <div class="sheet-inner">
+    <h3>Controls</h3>
+
+    <div class="ctrl-block">
+      <h4>Phone — tilt</h4>
+      <ul>
+        <li><b>Tilt left / right</b> — bank and turn</li>
+        <li><b>Tilt forward</b> — dive · <b>tilt back</b> — climb</li>
+        <li><b>Tap</b> anywhere — flap</li>
+        <li><b>Hold</b> — tuck wings (dive)</li>
+        <li><b>Two-finger tap</b> — re-centre the tilt neutral point</li>
+      </ul>
+      <p class="note">iOS asks permission for motion sensors — the prompt appears when you take flight.</p>
+    </div>
+
+    <div class="ctrl-block">
+      <h4>Touch — drag fallback</h4>
+      <ul>
+        <li><b>Drag</b> — steer (used automatically when no tilt sensor)</li>
+        <li><b>Tap</b> — flap · <b>hold</b> — tuck</li>
+      </ul>
+    </div>
+
+    <div class="ctrl-block">
+      <h4>Desktop</h4>
+      <ul>
+        <li><b>A / D</b> or <b>← →</b> — bank</li>
+        <li><b>W / S</b> or <b>↑ ↓</b> — dive / climb</li>
+        <li><b>Space</b> — flap · <b>Shift</b> — tuck · <b>Mouse drag</b> — look</li>
+        <li><b>Esc</b> — menu · <b>P</b> — photo mode · <b>F</b> — perf readout</li>
+      </ul>
+    </div>
+
+    <button class="primary wide" data-close="controls">Done</button>
+  </div>
+</div>
+
+<!-- ══════════════ CREDITS ══════════════ -->
+<div id="credits" class="overlay sheet hidden">
+  <div class="sheet-inner">
+    <h3>Assets &amp; credits</h3>
+    <p class="note">Every third-party asset below is streamed live from its own CDN and is CC0 or otherwise free to use. Nothing here is redistributed.</p>
+    <dl class="credit-list">
+      <dt>Poly Haven <span>CC0</span></dt>
+      <dd>HDRI skies and PBR ground / rock / snow / sand / bark / asphalt textures. polyhaven.com</dd>
+      <dt>three.js example models <span>CC-BY</span></dt>
+      <dd>Flamingo, Parrot and Stork GLB models with morph-target flight animation, used for the menu birds and the distant flocks. github.com/mrdoob/three.js</dd>
+      <dt>three.js <span>MIT</span></dt>
+      <dd>Renderer, loaders and post-processing stack.</dd>
+      <dt>Procedural, built in-engine</dt>
+      <dd>Terrain, rivers, coastline, city, vegetation, cloudscape, water surface, first-person wings and all flight physics.</dd>
+    </dl>
+    <button class="primary wide" data-close="credits">Done</button>
+  </div>
+</div>
+
+<!-- ══════════════ MOTION PERMISSION ══════════════ -->
+<div id="motion-gate" class="overlay sheet hidden">
+  <div class="sheet-inner narrow">
+    <h3>Tilt to fly</h3>
+    <p>AVES flies by tilting the phone itself. iOS needs your permission before a web page can read the motion sensors.</p>
+    <button class="primary wide" id="motion-allow">Enable tilt controls</button>
+    <button class="ghost wide" id="motion-skip">Use drag controls instead</button>
+  </div>
+</div>
+
+<!-- ══════════════ HUD ══════════════ -->
+<div id="hud" class="hidden">
+  <div class="hud-corner tl">
+    <div class="hud-bird" id="h-bird">HAWK</div>
+    <div class="hud-world" id="h-world">THE FOREST</div>
+  </div>
+
+  <div class="hud-corner tr">
+    <div class="gauge"><span class="g-label">ALT</span><span class="g-val" id="h-alt">0</span><span class="g-unit">m</span></div>
+    <div class="gauge"><span class="g-label">SPD</span><span class="g-val" id="h-spd">0</span><span class="g-unit">km/h</span></div>
+    <div class="gauge sub"><span class="g-label">VAR</span><span class="g-val" id="h-var">0.0</span><span class="g-unit">m/s</span></div>
+  </div>
+
+  <div class="hud-corner bl">
+    <div class="stamina"><div class="stamina-fill" id="h-stam"></div></div>
+    <div class="stamina-label">STAMINA</div>
+  </div>
+
+  <div class="hud-corner br">
+    <div class="hud-state" id="h-state">GLIDE</div>
+    <div class="hud-thermal hidden" id="h-thermal">THERMAL</div>
+  </div>
+
+  <div class="horizon-wrap"><div class="horizon" id="h-horizon"></div></div>
+  <div id="h-toast" class="toast"></div>
+  <div id="h-stall" class="stall-warn hidden">STALL</div>
+  <button id="h-menu" class="hud-btn">☰</button>
+  <div id="perf" class="perf hidden"></div>
+</div>
+
+<div id="fatal" class="overlay hidden">
+  <div class="sheet-inner">
+    <h3>Unable to take off</h3>
+    <p id="fatal-msg"></p>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
