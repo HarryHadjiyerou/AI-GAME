@@ -22,19 +22,28 @@ step, no bundler, no framework. Open `index.html` from a local server and fly.
 The game uses ES modules and an import map, so it needs to be served over HTTP —
 opening the file directly with `file://` will not work.
 
+### Online
+
+AVES is static files with no build step, so GitHub Pages serves it as-is:
+**Settings → Pages → Deploy from a branch → `main` → `/ (root)`**. The site
+appears at `https://<user>.github.io/AI-GAME/` a minute or so later.
+
+This matters for phones. Tilt controls need a secure context — iOS will not
+release the motion sensors over plain `http://`, so a phone pointed at a
+laptop's LAN address silently falls back to drag. An HTTPS URL is what gets
+you tilt.
+
+`.github/workflows/pages.yml` is an optional alternative that redeploys on
+every push; switch the Pages source to "GitHub Actions" to use it instead.
+
+### Locally
+
 ```bash
-npm start              # serves on http://localhost:8080
+npx --yes http-server -p 8080 -c-1 .   # or: npm start
 ```
 
-or anything equivalent:
-
-```bash
-python3 -m http.server 8080
-npx serve .
-```
-
-Then open `http://localhost:8080`. On a phone, put the phone and the computer on
-the same network and browse to the machine's LAN address.
+or anything equivalent — `python3 -m http.server 8080`, `npx serve .`. Then open
+`http://localhost:8080`. No `npm install` needed; that is only for the tests.
 
 ---
 
