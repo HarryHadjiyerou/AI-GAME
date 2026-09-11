@@ -36,6 +36,16 @@ you tilt.
 `.github/workflows/pages.yml` is an optional alternative that redeploys on
 every push; switch the Pages source to "GitHub Actions" to use it instead.
 
+For a drag-and-drop host instead — Netlify Drop, Cloudflare Pages, Surge —
+`tools/build-site.sh` packages just the files the browser needs:
+
+```bash
+./tools/build-site.sh          # → aves-site.zip, about 90 KB
+```
+
+`index.html` sits at the archive root, which is what these hosts look for; a
+single wrapping folder is the usual reason such a deploy comes back 404.
+
 ### Locally
 
 ```bash

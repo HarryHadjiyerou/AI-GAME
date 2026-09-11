@@ -8,8 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SHOTS = path.join(ROOT, 'tools/tmp/shots');
+// Serve the repository by default, or any other directory via AVES_ROOT —
+// which is how the deployable zip gets tested as a standalone artefact.
+const ROOT = process.env.AVES_ROOT
+  ? path.resolve(process.env.AVES_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SHOTS = process.env.AVES_SHOTS ?? path.join(ROOT, 'tools/tmp/shots');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
@@ -54,7 +58,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
    and handed back to the page, cached on disk so four worlds' worth
    of HDRIs and textures are only pulled once. */
 
-const CACHE = path.join(ROOT, 'tools/tmp/netcache');
+const CACHE = process.env.AVES_CACHE ?? path.join(ROOT, 'tools/tmp/netcache');
 fs.mkdirSync(CACHE, { recursive: true });
 const cacheKey = (u) => path.join(CACHE, Buffer.from(u).toString('base64url').slice(0, 180));
 let served = 0, fetched = 0;
