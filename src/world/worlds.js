@@ -138,6 +138,15 @@ export async function buildWorld(name, ctx) {
 
   const style = new StyleSystem(palette, {
     planetRadius: def.planetRadius,
+    /* Cloud shadows, keyed to this world's own weather.
+     *
+     * The deck height and the drift come from the same numbers the billboard
+     * clouds and the wind use, so what crosses the ground is going the same
+     * way at the same speed as what is overhead. Getting that wrong is more
+     * noticeable than not having the shadows at all. */
+    cloudHeight: (def.clouds?.altitude?.[0] ?? 900) * 0.92,
+    cloudCover: def.sky?.cloudAmount ?? 0.4,
+    cloudDrift: [def.wind.x * 0.8, def.wind.z * 0.8],
     ...def.style,
   });
 
@@ -172,6 +181,10 @@ export async function buildWorld(name, ctx) {
     height, level: waterLevel, palette,
     rings: quality.waterRings ?? 96,
     segments: quality.waterSegments ?? 160,
+    // The sea reflects the dome by evaluating the same function against the
+    // same uniform objects, so the two can never disagree about what the sky
+    // is doing — including halfway through a weather front.
+    skyUniforms: sky.reflectionUniforms(),
     ...def.water,
   });
   scene.add(water.mesh);

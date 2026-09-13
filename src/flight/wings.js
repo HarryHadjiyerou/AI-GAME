@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { StyleSystem } from '../core/style.js';
+import { SURFACE } from '../core/screenspace.js';
 import { clamp, lerp, damp, smooth } from '../core/noise.js';
 
 const _invQ = new THREE.Quaternion();
@@ -128,6 +129,10 @@ export class Wings {
       sunStrength: 1.10, ambStrength: 0.62,
       rimStrength: 2.10, rimPower: 2.6,
       fogMax: 0,
+      // The wings live in their own scene at the origin, so a world-space
+      // cloud shadow lookup would sample the same spot forever and flicker
+      // the whole wing on and off as the deck drifted over that one point.
+      cloudShadow: 0,
     });
     this.style.u.uCamPos.value.set(0, 0, 0);
 
@@ -154,6 +159,9 @@ export class Wings {
 
     const makeFeather = (base, tip) => this.style.make({
       name: 'feather',
+      // Tagged so the screen-space passes leave the wings alone; see
+      // core/screenspace.js for why they have to.
+      surfaceId: SURFACE.OVERLAY,
       pars: 'uniform vec3 uBase, uTip; varying vec2 vUv;',
       vertexPars: 'varying vec2 vUv;',
       vertexHook: 'vUv = uv;',
@@ -183,6 +191,7 @@ export class Wings {
     // The arm panels are skin and coverts, not flight feathers.
     this.skinMaterial = this.style.make({
       name: 'wing-skin',
+      surfaceId: SURFACE.OVERLAY,
       pars: 'uniform vec3 uBase; varying vec2 vUv;',
       vertexPars: 'varying vec2 vUv;',
       vertexHook: 'vUv = uv;',

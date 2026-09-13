@@ -83,8 +83,22 @@
         <option value="low">Low — long battery</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>
-        <option value="ultra">Ultra — desktop GPU</option>
+        <option value="ultra">Ultra — supersampled, desktop GPU</option>
       </select>
+    </label>
+
+    <label class="row">
+      <span>Reflections</span>
+      <select id="s-reflect">
+        <option value="auto" selected>Match graphics</option>
+        <option value="off">Off — sky only</option>
+        <option value="low">Short</option>
+        <option value="medium">Medium</option>
+        <option value="high">Long</option>
+        <option value="ultra">Longest</option>
+      </select>
+      <em class="row-note">Rays are marched per pixel against the depth buffer.
+        Off still reflects the sky, which is most of what water is.</em>
     </label>
 
     <label class="row">

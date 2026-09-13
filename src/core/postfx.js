@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ScreenSpacePass } from './screenspace.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -161,25 +161,25 @@ export const QUALITY = {
     scale: 0.62, bloom: true, samples: 0,
     terrainLod: 2.1, terrainBudget: 1, waterRings: 56, waterSegments: 96,
     cloudScale: 0.45, vegScale: 0.5, cityScale: 0.6, traffic: 50,
-    motes: 320, rain: 900, flock: 5,
+    motes: 320, rain: 900, flock: 5, ssr: 'off',
   },
   medium: {
     scale: 0.82, bloom: true, samples: 0,
     terrainLod: 2.6, terrainBudget: 2, waterRings: 76, waterSegments: 128,
     cloudScale: 0.75, vegScale: 0.8, cityScale: 0.85, traffic: 110,
-    motes: 650, rain: 1800, flock: 8,
+    motes: 650, rain: 1800, flock: 8, ssr: 'low',
   },
   high: {
     scale: 1.00, bloom: true, samples: 0,
     terrainLod: 3.0, terrainBudget: 2, waterRings: 96, waterSegments: 160,
     cloudScale: 1.0, vegScale: 1.0, cityScale: 1.0, traffic: 150,
-    motes: 900, rain: 2600, flock: 10,
+    motes: 900, rain: 2600, flock: 10, ssr: 'high',
   },
   ultra: {
-    scale: 1.00, bloom: true, samples: 4,
+    scale: 1.30, bloom: true, samples: 0,
     terrainLod: 3.6, terrainBudget: 3, waterRings: 112, waterSegments: 192,
     cloudScale: 1.3, vegScale: 1.25, cityScale: 1.2, traffic: 220,
-    motes: 1400, rain: 3400, flock: 14,
+    motes: 1400, rain: 3400, flock: 14, ssr: 'ultra',
   },
 };
 
@@ -215,21 +215,27 @@ export class BirdVision {
       }
     );
 
+    this.reflect?.dispose();
     this.composer?.dispose();
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.setPixelRatio(1);
     this.composer.setSize(size.x, size.y);
 
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-
-    // The wings, drawn over the finished world through their own much wider
-    // camera. Depth is cleared first so they are never occluded by terrain
-    // half a kilometre away; colour is not, so the world shows through.
-    this.overlayPass = new RenderPass(new THREE.Scene(), this.camera);
-    this.overlayPass.clear = false;
-    this.overlayPass.clearDepth = true;
-    this.overlayPass.enabled = false;
-    this.composer.addPass(this.overlayPass);
+    /* The scene pass and the reflection pass are one object.
+     *
+     * They have to be: the reflections are marched against the depth buffer
+     * the scene render produced, and EffectComposer's ping-pong targets carry
+     * no depth texture, so nothing downstream of an ordinary RenderPass can
+     * see the depth any more. ReflectionPass owns its own colour+depth target,
+     * draws the world and the wings into it, and hands the composer a finished
+     * frame. See core/screenspace.js. */
+    this.reflect = new ScreenSpacePass(this.scene, this.camera, {
+      width: Math.max(1, Math.floor(size.x * this.scale)),
+      height: Math.max(1, Math.floor(size.y * this.scale)),
+      renderScale: this.scale,
+      quality: q.ssr ?? 'medium',
+    });
+    this.composer.addPass(this.reflect);
 
     if (q.bloom) {
       this.bloom = new UnrealBloomPass(
@@ -272,19 +278,33 @@ export class BirdVision {
     if (g.contrast !== undefined) u.uContrast.value = g.contrast;
     if (this.bloom && palette.bloom !== undefined) this.bloom.strength = palette.bloom;
     this.renderer.toneMappingExposure = palette.exposure ?? 1;
+    // Light shafts are the sun's, so they are the palette's too.
+    this.reflect?.setSun(palette.sunDir, palette.sunGlow ?? palette.sunColor);
+    if (this.reflect) {
+      this.reflect.shaftStrength = palette.shafts ?? 0.55;
+      this.reflect.setQuality(this.reflect.tier);
+    }
     this._palette = palette;
   }
 
   /** Hand the wing pass its scene and camera, or null to switch it off. */
   setOverlay(scene, camera) {
-    this.overlay = scene ? { scene, camera } : null;
-    this.overlayPass.scene = scene ?? this.overlayPass.scene;
-    this.overlayPass.camera = camera ?? this.overlayPass.camera;
-    this.overlayPass.enabled = !!scene;
+    this.overlay = scene && camera ? { scene, camera } : null;
+    this.reflect.overlay = this.overlay;
   }
+
+  /**
+   * How far reflected rays are allowed to travel before the sky takes over.
+   * 'off' skips the march entirely and leaves the water with its analytic
+   * sky reflection, which is most of the effect for none of the cost.
+   */
+  setReflections(tier) { return this.reflect.setQuality(tier); }
 
   setSize(w, h) {
     this._w = w; this._h = h;
+    // Set before the composer runs: it calls every pass's setSize with the
+    // canvas size, and the pass scales that itself.
+    if (this.reflect) this.reflect.renderScale = this.scale;
     this.composer.setSize(w, h);
     const rw = Math.max(1, Math.floor(w * this.scale));
     const rh = Math.max(1, Math.floor(h * this.scale));
@@ -300,7 +320,11 @@ export class BirdVision {
    * full canvas size, so all that changes is how many pixels get shaded.
    */
   setRenderScale(scale) {
-    const s = Math.max(0.35, Math.min(1, scale));
+    // Above 1 this is supersampling: the scene is rendered larger than the
+    // canvas and filtered down on the way out, which is the only form of
+    // anti-aliasing that survives a post chain intact. MSAA cannot — the
+    // reflection pass resolves the buffer before anything else sees it.
+    const s = Math.max(0.35, Math.min(2, scale));
     if (Math.abs(s - this.scale) < 0.005) return;
     this.scale = s;
     const size = this.renderer.getSize(new THREE.Vector2());

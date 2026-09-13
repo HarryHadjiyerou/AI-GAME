@@ -82,6 +82,17 @@ only from inside a user gesture, so AVES asks the moment you enable tilt.
 interface for screenshots, `F` shows a performance readout. A gamepad works too:
 left stick steers, right stick looks, `A` or the right trigger beats.
 
+**Graphics.** Defaults to *Auto*, which picks a coarse tier from the device and
+then watches the frame rate and adjusts. It gives up reflections before
+resolution — a cliff missing from the sea costs less than every edge in the
+frame — drops fast, climbs back slowly, and ratchets: it will not pump between
+two settings. *Ultra* renders at 1.3× and downsamples, which is the only
+anti-aliasing that survives a post-processing chain intact.
+
+**Reflections** can be pinned separately, and pinning them also takes them away
+from the adaptive controller. *Off* still reflects the sky, which is most of
+what water is.
+
 **Flight assistance.** Three levels in the settings, defaulting to *Balanced*:
 
 | | |
@@ -173,6 +184,60 @@ conceit work without a planet-sized world.
 **Aerial perspective** with a height falloff and a forward-scattering lobe, so
 haze thins as you climb and glows when you fly into the sun.
 
+**Cloud shadows.** The ground under a cloud is in shade. The surface position is
+projected up the sun direction onto the cloud deck, at the height and drifting on
+the wind this world's clouds actually use, and sampled. It costs one noise lookup
+per pixel and it is the difference between a landscape and a model of one.
+
+---
+
+## Water, and ray tracing
+
+**There is no hardware ray tracing on the web.** WebGL 2 has no concept of it,
+and it is not in WebGPU either: acceleration structures and ray queries would
+need bindless resources and new API surface, and the working group has not
+committed to shipping them — 2027 at the earliest, if ever. The browser path
+tracers that do exist accumulate samples over seconds against a *static* scene,
+which is the opposite of a bird at eighty kilometres an hour. Anyone who tells
+you otherwise is describing something else.
+
+What is available, and what AVES does, is cast real rays against the depth
+buffer. Per pixel, marched, with binary refinement on the hit. Everything the
+camera can see reflects correctly; anything behind the camera cannot, and falls
+back to the sky — which is the same sky function the dome is painted with, so
+the seam is invisible. The scene is drawn **once**. A planar reflection would be
+the honest way to reflect off-screen geometry and it costs a second pass over
+the whole world, which is not affordable on a phone.
+
+Finding the water costs nothing extra: these surfaces are opaque, so the alpha
+channel of the scene buffer is dead weight, and `src/core/style.js` writes a
+surface id into it. See `src/core/screenspace.js`.
+
+Two more effects ride in the same pass, because the depth reads are the
+expensive part and they share them:
+
+- **Shafts.** A march from each pixel towards the sun that accumulates only the
+  steps the depth buffer says are sky. The beams are the gaps between the
+  occluders.
+- **Contact shadows.** A short march towards the sun asking whether anything is
+  in the way. Not a shadow map and no substitute for one — it reaches metres,
+  not kilometres — but metres is where a missing shadow shows most.
+
+The water shading underneath all of it is built on Fresnel rather than on
+painted colour. The ratio of sky to depth is computed per pixel from the angle
+between the eye and the real wave normal, so the horizon goes to mirror and the
+water under the bird goes to glass without either being authored. Under the
+surface it is Beer-Lambert absorption per channel — water eats red first and
+blue last, which is the entire reason shallow water is green over sand and deep
+water is blue over nothing. Then refraction off the wave slope, glare shaped by
+the wave normals so it breaks into a path rather than a hotspot, and foam on the
+crests and along the depth contour.
+
+The fine ripple fades out with distance on purpose. Past a few hundred metres one
+pixel covers many ripples and a normal sampled from the middle of them is noise;
+the average of a lot of ripples pointing every way is flat, so the sea converges
+to a mirror as it recedes — which is also what a real one does.
+
 ---
 
 ## Architecture
@@ -191,6 +256,7 @@ src/
 │   ├── postfx.js         fisheye, peripheral blur, speed streak, vignette
 │   ├── input.js          sticks / keyboard / gamepad / tilt, iOS permission flow
 │   ├── style.js          the shading model every material in the game shares
+│   ├── screenspace.js    ray-marched reflections, shafts, contact shadows
 │   └── quality.js        watches the frame rate and moves the render scale
 ├── flight/
 │   ├── physics.js        the flight model
@@ -219,6 +285,7 @@ tools/
 ├── flight-test.js        wind tunnel for the flight model      (npm test)
 ├── assist-test.js        does the assist actually stop you hitting the ground
 ├── quality-test.js       the adaptive-quality controller, against scripted frame rates
+├── screenspace-test.js   where the sun lands on screen, and the surface ids
 ├── lint.js               module parse, GLSL reserved words, template literals
 ├── terrain-test.js       statistical checks on the height fields
 └── smoke.mjs             headless browser: boots, launches each world, flies it
@@ -256,6 +323,7 @@ npm run test:flight       # glide ratios, stoops, turns, stalls, thermals
 npm run test:terrain      # relief, water coverage, spawn safety, sampling cost
 npm run test:assist       # the assist: recoveries, no ground contact, no oscillation
 npm run test:quality      # adaptive quality: backs off, climbs back, never pumps
+npm run test:screenspace  # sun projection and surface ids
 npm run test:smoke        # headless Chromium: boots and flies all four worlds
 node tools/smoke.mjs hawk # ... or just one
 ```

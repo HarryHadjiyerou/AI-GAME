@@ -188,6 +188,7 @@ export class Weather {
       horizon: palette.horizon.clone(),
       sunColor: palette.sunColor.clone(),
       cloudAmount: sky.uniforms.uCloudAmount.value,
+      cloudShadow: style.u.uCloudShadow.value,
       cloudLit: sky.uniforms.uCloudLit.value.clone(),
       cloudShade: sky.uniforms.uCloudShade.value.clone(),
     };
@@ -290,6 +291,13 @@ export class Weather {
     // Everything creeps towards a leaden grey-blue rather than simply darker.
     this._tmp.copy(this._base.haze).lerp(this._leaden, Math.min(1, dark * 1.25));
     u.uHaze.value.lerp(this._tmp, 1 - Math.exp(-dt / 0.8));
+
+    // The shadows on the ground thicken with the deck overhead — and thin out
+    // again under a storm, because by then there is no direct sun left to
+    // block and a second layer of darkness just turns the world to mud.
+    u.uCloudCover.value = damp(u.uCloudCover.value, w.cover, 0.8, dt);
+    u.uCloudShadow.value = damp(u.uCloudShadow.value,
+      this._base.cloudShadow * (1 - dark * 1.3), 0.8, dt);
 
     const sk = this.sky.uniforms;
     sk.uCloudAmount.value = damp(sk.uCloudAmount.value, w.cover, 0.8, dt);

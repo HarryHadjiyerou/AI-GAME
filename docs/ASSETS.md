@@ -79,8 +79,11 @@ the licensing page got shorter. No part of that trade was a compromise.
 Everything else is authored in code and has no licence to carry:
 
 - Terrain height fields, erosion and biome masks (`src/world/terrain.js`)
-- Sky dome, cloud strata and the palette environment map (`src/world/sky.js`)
-- Gerstner-wave water with depth-shaded shallows (`src/world/water.js`)
+- Sky dome, cloud strata and the palette environment map (`src/world/sky.js`) —
+  written as a function the water calls too, so a reflection is the real sky
+- Ray-marched reflections, light shafts and contact shadows (`src/core/screenspace.js`)
+- Gerstner-wave water: Fresnel, Beer-Lambert absorption, refraction, glare and
+  foam (`src/world/water.js`)
 - Trees, scrub and grass, instanced from procedural sprites (`src/world/vegetation.js`)
 - The city, its traffic and its windows (`src/world/city.js`)
 - Weather: wind, gusts, rain, lightning (`src/world/weather.js`)

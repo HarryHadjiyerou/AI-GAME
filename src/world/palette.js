@@ -34,6 +34,7 @@ const C = (hex) => new THREE.Color(hex);
  * @property {THREE.Color} haze        what distance dissolves into
  * @property {THREE.Color} sunColor
  * @property {THREE.Color} sunGlow     the halo around it
+ * @property {number} shafts            how much light gets caught in the air
  * @property {THREE.Vector3} sunDir
  * @property {THREE.Color[]} ground    the terrain ramp, low to high
  * @property {THREE.Color} shadow      colour of unlit faces — never grey
@@ -73,6 +74,7 @@ export const PALETTES = {
     fogPower: 1.45,
     exposure: 1.08,
     bloom: 0.42,
+    shafts: 0.85,
     grade: { lift: C('#0d1626'), gain: C('#fff0dd'), saturation: 1.18, contrast: 1.06 },
   },
 
@@ -103,6 +105,7 @@ export const PALETTES = {
     fogPower: 1.5,
     exposure: 1.12,
     bloom: 0.60,
+    shafts: 0.62,
     grade: { lift: C('#101c2e'), gain: C('#fff3e4'), saturation: 1.28, contrast: 1.08 },
   },
 
@@ -133,6 +136,7 @@ export const PALETTES = {
     fogPower: 1.5,
     exposure: 1.05,
     bloom: 0.55,
+    shafts: 0.95,
     grade: { lift: C('#131a3a'), gain: C('#fff0f2'), saturation: 1.22, contrast: 1.04 },
   },
 
@@ -163,6 +167,7 @@ export const PALETTES = {
     fogPower: 1.4,
     exposure: 0.98,
     bloom: 0.40,
+    shafts: 0.45,
     grade: { lift: C('#0a1030'), gain: C('#ffeede'), saturation: 1.20, contrast: 1.12 },
     night: 0.52,            // how many windows are lit
   },

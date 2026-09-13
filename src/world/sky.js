@@ -37,34 +37,70 @@ const SKY_VERT = /* glsl */`
   }
 `;
 
-const SKY_FRAG = /* glsl */`
-  precision highp float;
+/* ── the sky, as a function ───────────────────────────────
+ *
+ * The dome is not the only thing that needs to know what the sky looks
+ * like in a given direction. Water reflects it, and a reflection that
+ * does not match the sky it came from is the fastest way to make a
+ * surface look like plastic. So the whole thing — gradient, sun, halo
+ * and cloud deck — is written once here as `avesSky(dir)` and pulled
+ * into both the dome and the water, sharing the same uniform objects,
+ * so weather moves them together and they cannot drift apart.
+ *
+ * Names are prefixed because these get spliced into materials that
+ * already have helpers of their own.
+ * ───────────────────────────────────────────────────────── */
 
-  uniform vec3  uZenith, uSky, uHorizon, uHaze;
-  uniform vec3  uSunDir, uSunColor, uSunGlow;
+/* The four the stylised shading model already declares for itself. A material
+   built on core/style.js must not declare them twice, so they are split out
+   and only the dome, which has no style block, includes them. */
+const SKY_SHARED_DECLS = /* glsl */`
+  uniform vec3  uSunDir, uSunColor, uSunGlow, uHaze;
+`;
+
+/** Everything else the sky needs, safe to include anywhere. */
+export const SKY_OWN_DECLS = /* glsl */`
+  uniform vec3  uZenith, uSky, uHorizon;
   uniform float uSunSize;
   uniform vec3  uCloudLit, uCloudShade;
-  uniform float uCloudAmount, uCloudSpeed, uTime;
+  uniform float uCloudAmount, uCloudSpeed, uSkyTime;
   uniform float uStars;
   uniform float uStorm;
+`;
 
-  varying vec3 vDir;
-
-  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float vnoise(vec2 p){
+/** The function itself, and the noise it runs on. */
+export const SKY_FN = /* glsl */`
+  float skyHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float skyVnoise(vec2 p){
     vec2 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
-               mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
+    return mix(mix(skyHash(i), skyHash(i + vec2(1,0)), f.x),
+               mix(skyHash(i + vec2(0,1)), skyHash(i + vec2(1,1)), f.x), f.y);
   }
-  float fbm(vec2 p){
+  /* Octaves are a parameter because the dome and a reflection of the dome do
+     not need the same amount of cloud detail. The dome fills the top half of
+     the frame and is looked at directly; the reflection of it is broken up by
+     wave normals before anyone sees it, and running five octaves of value
+     noise per water pixel for detail that gets destroyed on arrival is the
+     single most expensive mistake available in this shader. */
+  float skyFbm(vec2 p, int oct){
     float v = 0.0, a = 0.5;
-    for (int i = 0; i < 5; i++){ v += a * vnoise(p); p = p * 2.03 + 17.0; a *= 0.5; }
+    for (int i = 0; i < 5; i++){
+      if (i >= oct) break;
+      v += a * skyVnoise(p); p = p * 2.03 + 17.0; a *= 0.5;
+    }
     return v;
   }
 
-  void main() {
-    vec3 dir = normalize(vDir);
+  /**
+   * @param dir      unit direction to look along
+   * @param stars    star brightness, 0 for a reflection
+   * @param sunScale how much of the sun disc and halo to include: the dome
+   *                 wants all of it, a reflection wants it handled separately
+   *                 so the glare can be shaped by the wave normals
+   * @param oct      cloud detail, 1-5
+   */
+  vec3 avesSky(vec3 dir, float stars, float sunScale, int oct) {
     float h = dir.y;
 
     /* ── the gradient ── */
@@ -80,29 +116,25 @@ const SKY_FRAG = /* glsl */`
     // there is never a seam where the world stops.
     col = mix(col, uHaze, smoothstep(0.03, -0.26, h));
 
-    // A little dither, because an 8-bit gradient across a whole sky bands
-    // no matter how smooth the maths is.
-    col += (hash(gl_FragCoord.xy * 0.71) - 0.5) * 0.006;
-
     /* ── the sun ── */
     float sd = max(dot(dir, uSunDir), 0.0);
     // Three falloffs stacked: the tight core, the bloom around it, and a
     // wide wash across that whole quarter of the sky.
     float glow = pow(sd, 2200.0) * 3.0 + pow(sd, 60.0) * 0.55
                + pow(sd, 8.0) * 0.22 + pow(sd, 1.8) * 0.10;
-    col += uSunGlow * glow * (1.0 - uStorm * 0.8);
+    col += uSunGlow * glow * (1.0 - uStorm * 0.8) * sunScale;
     float disc = smoothstep(cos(uSunSize * 1.5), cos(uSunSize * 0.55), sd);
-    col = mix(col, uSunColor * 2.4, disc * (1.0 - uStorm * 0.85));
+    col = mix(col, uSunColor * 2.4, disc * (1.0 - uStorm * 0.85) * sunScale);
 
     /* ── stars, where it is dark enough for them ── */
-    if (uStars > 0.001 && h > -0.02) {
+    if (stars > 0.001 && h > -0.02) {
       vec3 sp = dir * 220.0;
-      float tw = hash(floor(sp.xz) + floor(sp.y) * 37.0);
+      float tw = skyHash(floor(sp.xz) + floor(sp.y) * 37.0);
       float star = smoothstep(0.9975, 0.99975, tw);
-      float twinkle = 0.6 + 0.4 * sin(uTime * 2.4 + tw * 90.0);
+      float twinkle = 0.6 + 0.4 * sin(uSkyTime * 2.4 + tw * 90.0);
       // Fade them out near the sun and near the bright horizon.
       float room = smoothstep(0.05, 0.55, h) * (1.0 - smoothstep(0.2, 0.9, sd));
-      col += vec3(star * twinkle * room * uStars);
+      col += vec3(star * twinkle * room * stars);
     }
 
     /* ── cloud strata ── */
@@ -111,10 +143,10 @@ const SKY_FRAG = /* glsl */`
       // its perspective, streaking towards the horizon instead of tiling
       // evenly across the dome like wallpaper.
       vec2 cuv = dir.xz / max(0.045, h) * 0.30;
-      vec2 drift = vec2(uTime * uCloudSpeed, uTime * uCloudSpeed * 0.38);
+      vec2 drift = vec2(uSkyTime * uCloudSpeed, uSkyTime * uCloudSpeed * 0.38);
 
-      float low = fbm(cuv * 0.55 + drift);
-      float high = fbm(cuv * 0.22 - drift * 0.45 + 31.0);
+      float low = skyFbm(cuv * 0.55 + drift, oct);
+      float high = skyFbm(cuv * 0.22 - drift * 0.45 + 31.0, oct);
 
       float mask = smoothstep(0.02, 0.16, h);            // nothing at the rim
       float cover = uCloudAmount;
@@ -139,6 +171,27 @@ const SKY_FRAG = /* glsl */`
       col = mix(col, cloud, clamp(lowC + highC, 0.0, ceiling));
     }
 
+    return col;
+  }
+`;
+
+/** Everything, for a shader that has no stylised block of its own. */
+export const SKY_PARS = SKY_SHARED_DECLS + SKY_OWN_DECLS + SKY_FN;
+
+/** For a material already built on core/style.js, which declares the rest. */
+export const SKY_PARS_EMBED = SKY_OWN_DECLS + SKY_FN;
+
+const SKY_FRAG = /* glsl */`
+  precision highp float;
+  ${SKY_PARS}
+
+  varying vec3 vDir;
+
+  void main() {
+    vec3 col = avesSky(normalize(vDir), uStars, 1.0, 5);
+    // A little dither, because an 8-bit gradient across a whole sky bands
+    // no matter how smooth the maths is.
+    col += (skyHash(gl_FragCoord.xy * 0.71) - 0.5) * 0.006;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -160,7 +213,7 @@ export class SkyDome {
       uCloudSpeed: { value: opts.cloudSpeed ?? 0.0035 },
       uStars: { value: opts.stars ?? 0 },
       uStorm: { value: 0 },
-      uTime: { value: 0 },
+      uSkyTime: { value: 0 },
     };
 
     this.material = new THREE.ShaderMaterial({
@@ -183,7 +236,26 @@ export class SkyDome {
     };
   }
 
-  update(dt) { this.uniforms.uTime.value += dt; }
+  update(dt) { this.uniforms.uSkyTime.value += dt; }
+
+  /**
+   * The uniform objects a reflection needs, by reference.
+   *
+   * By reference is the point. The water holds the same objects the dome
+   * does, so when weather drags the sky towards leaden the reflection in the
+   * sea goes with it on the same frame, with nothing to keep in sync.
+   */
+  reflectionUniforms() {
+    const u = this.uniforms;
+    return {
+      uZenith: u.uZenith, uSky: u.uSky, uHorizon: u.uHorizon, uHaze: u.uHaze,
+      uSunGlow: u.uSunGlow, uSunSize: u.uSunSize,
+      uCloudLit: u.uCloudLit, uCloudShade: u.uCloudShade,
+      uCloudAmount: u.uCloudAmount, uCloudSpeed: u.uCloudSpeed,
+      uStars: u.uStars, uStorm: u.uStorm, uSkyTime: u.uSkyTime,
+    };
+  }
+
   dispose() { this.mesh.geometry.dispose(); this.material.dispose(); }
 }
 
@@ -480,5 +552,6 @@ export class Clouds {
   }
 
   update(dt) { this.uniforms.uTime.value += dt; }
+
   dispose() { this.mesh.geometry.dispose(); this.material.dispose(); }
 }

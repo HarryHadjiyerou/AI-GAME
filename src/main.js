@@ -29,6 +29,7 @@ const DEFAULTS = {
   assist: 'balanced',
   tilt: false,
   quality: 'auto',
+  reflections: 'auto',
   fov: 104,
   fisheye: 0.30,
   headMotion: 1,
@@ -105,11 +106,14 @@ class Game {
     this.auto = new AutoQuality({
       target: Math.min(60, Math.round(screen?.refreshRate ?? 60)) || 60,
       ceiling: QUALITY[this._baseTier()].scale,
+      reflect: QUALITY[this._baseTier()].ssr ?? 'medium',
       onScale: (s) => this.vision?.setRenderScale(s),
       onBloom: (on) => this.vision?.setBloom(on),
+      onReflect: (t) => { if (!this.auto.reflectPinned) this.vision?.setReflections(t); },
     });
     this.auto.enabled = this.settings.quality === 'auto';
     if (this.auto.enabled) this.vision.setRenderScale(this.auto.scale);
+    this._applyReflections();
     this.vision.setFisheye(this.settings.fisheye);
 
     this.birdCam = new BirdCamera(this.camera, { fov: this.settings.fov });
@@ -288,6 +292,24 @@ class Game {
   pause(on) {
     this.paused = on;
     if (on) this.controls.disable(); else this.controls.enable();
+  }
+
+  /**
+   * Reflections follow the graphics tier unless the player has pinned them.
+   *
+   * Pinning also takes them away from the adaptive controller: someone who has
+   * explicitly asked for long reflections did not ask for them to be quietly
+   * shortened again the first time the frame rate dips.
+   */
+  _applyReflections() {
+    const pinned = this.settings.reflections ?? 'auto';
+    if (pinned === 'auto') {
+      this.auto.reflectPinned = false;
+      this.vision?.setReflections(this.auto.reflect);
+    } else {
+      this.auto.reflectPinned = true;
+      this.vision?.setReflections(pinned);
+    }
   }
 
   /**
@@ -479,6 +501,16 @@ class Game {
       this._saveSettings();
     });
 
+    const refl = $('s-reflect');
+    if (refl) {
+      refl.value = s.reflections ?? 'auto';
+      refl.addEventListener('change', () => {
+        s.reflections = refl.value;
+        this._applyReflections();
+        this._saveSettings();
+      });
+    }
+
     const q = $('s-quality');
     q.value = s.quality;
     q.addEventListener('change', () => {
@@ -486,8 +518,9 @@ class Game {
       this.auto.enabled = q.value === 'auto';
       const tier = this._baseTier();
       this.vision?.setQuality(tier);
-      const scale = this.auto.setCeiling(QUALITY[tier].scale);
+      const scale = this.auto.setCeiling(QUALITY[tier].scale, QUALITY[tier].ssr ?? 'medium');
       if (this.auto.enabled) this.vision?.setRenderScale(scale);
+      this._applyReflections();
       this.auto.reset();
       this._resize();
       this._saveSettings();

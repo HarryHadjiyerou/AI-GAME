@@ -28,6 +28,7 @@
    ═══════════════════════════════════════════════════════════ */
 
 import * as THREE from 'three';
+import { SURFACE } from './screenspace.js';
 
 /* Shared declarations and helpers, prepended to every stylised shader. */
 export const STYLE_PARS = /* glsl */`
@@ -39,6 +40,8 @@ export const STYLE_PARS = /* glsl */`
   uniform float uSunStrength, uAmbStrength, uRimStrength, uRimPower;
   uniform float uBands, uBandMix;
   uniform float uFogDensity, uFogPower, uFogHeightBase, uFogHeightFalloff, uFogHeightMix, uFogMax;
+  uniform float uCloudShadow, uCloudHeight, uCloudCover;
+  uniform vec2  uCloudDrift;
   uniform float uTime;
 
   float sHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -66,6 +69,34 @@ export const CURVE_GLSL = /* glsl */`
 
 /** The whole lighting model, in one function. */
 export const SHADE_GLSL = /* glsl */`
+  /* Cloud shadows.
+   *
+   * The single cheapest thing in this renderer that makes a landscape look
+   * like a place rather than a model. Without it a scene under 40% cloud is
+   * lit as evenly as a scene under none, and the sky and the ground read as
+   * two separate pictures stacked on top of each other.
+   *
+   * The ground position is projected up the sun direction onto the cloud
+   * deck, and the deck is sampled with the same kind of noise the sky paints
+   * its strata with. It is not the same instance of the noise — matching a
+   * perspective-projected dome to a plane on the ground is not worth what it
+   * would cost — but it is the same character, drifting on the same wind at
+   * the same cover, and the eye is entirely satisfied by that.
+   */
+  float avesCloudShadow(vec3 wpos) {
+    if (uCloudShadow < 0.001) return 1.0;
+    // A sun near the horizon throws a shadow from a cloud kilometres away;
+    // clamped, or the projection runs off to infinity at sunset.
+    float rise = max(0.22, uSunDir.y);
+    vec3 p = wpos + uSunDir * ((uCloudHeight - wpos.y) / rise);
+    vec2 uv = p.xz * 0.0011 + uCloudDrift * uTime * 0.01;
+    float c = sFbm(uv) + sFbm(uv * 2.7 + 13.0) * 0.35;
+    // Cover drives the threshold, so the shadows thicken as the sky does.
+    float lo = 0.70 - uCloudCover * 0.46;
+    float shade = smoothstep(lo, lo + 0.20, c);
+    return 1.0 - shade * uCloudShadow;
+  }
+
   vec3 avesShade(vec3 albedo, vec3 N, vec3 wpos, float ao) {
     vec3 V = normalize(uCamPos - wpos);
     float ndl = dot(N, uSunDir);
@@ -80,6 +111,8 @@ export const SHADE_GLSL = /* glsl */`
     // Sky above, bounce from the ground below. This is the whole reason
     // nothing in shadow goes grey.
     vec3 ambient = mix(uBounceColor, uSkyColor, N.y * 0.5 + 0.5);
+
+    lit *= avesCloudShadow(wpos);
 
     vec3 col = albedo * (uSunColor * lit * uSunStrength + ambient * uAmbStrength);
     col *= mix(1.0, ao, 0.85);
@@ -168,6 +201,10 @@ export function styleUniforms(palette, opts = {}) {
     uFogHeightFalloff: { value: opts.fogHeightFalloff ?? 1200 },
     uFogHeightMix: { value: opts.fogHeightMix ?? 0.55 },
     uFogMax: { value: opts.fogMax ?? 0.94 },
+    uCloudShadow: { value: opts.cloudShadow ?? 0.62 },
+    uCloudHeight: { value: opts.cloudHeight ?? 1200 },
+    uCloudCover: { value: opts.cloudCover ?? 0.4 },
+    uCloudDrift: { value: new THREE.Vector2(...(opts.cloudDrift ?? [3.5, 1.2])) },
     uTime: { value: 0 },
   };
 }
@@ -182,8 +219,11 @@ export function styleUniforms(palette, opts = {}) {
 export function stylisedMaterial({
   uniforms, albedo, vertexHook = null, pars = '', vertexPars = '',
   transparent = false, alphaTest = 0, side = THREE.FrontSide,
-  depthWrite = true, name = 'aves',
+  depthWrite = true, name = 'aves', surfaceId = null,
 }) {
+  /* Opaque surfaces are tagged by default; transparent ones never are, because
+     for them alpha is not spare — it is what the blend reads. */
+  const id = surfaceId ?? (transparent ? 0 : SURFACE.WORLD);
   const vertexShader = `
     ${STYLE_PARS}
     ${CURVE_GLSL}
@@ -216,14 +256,32 @@ export function stylisedMaterial({
 
       vec3 col = avesShade(albedo, N, vWorld, ao) + emissive;
       col = avesFog(col, vWorld, vDepth);
-      gl_FragColor = vec4(col, alpha);
+
+      /* The alpha channel doubles as a surface id.
+       *
+       * These materials are opaque, so the alpha the scene buffer receives is
+       * never read back by blending — which leaves a free channel next to
+       * every pixel of the frame. The screen-space pass in core/screenspace.js uses
+       * it to find the water without a second render target and without the
+       * GLSL 3 conversion that multiple render targets would force on every
+       * shader in the game. A material that actually needs its alpha (the
+       * cut-out vegetation) leaves this at zero and keeps it. */
+      float outA = alpha;
+      #ifdef AVES_SURFACE_ID
+        outA = AVES_SURFACE_ID;
+      #endif
+      gl_FragColor = vec4(col, outA);
     }
   `;
+
+  const defines = {};
+  if (alphaTest > 0) defines.AVES_ALPHATEST = alphaTest.toFixed(3);
+  if (id > 0) defines.AVES_SURFACE_ID = id.toFixed(3);
 
   const mat = new THREE.ShaderMaterial({
     uniforms, vertexShader, fragmentShader,
     transparent, side, depthWrite,
-    defines: alphaTest > 0 ? { AVES_ALPHATEST: alphaTest.toFixed(3) } : {},
+    defines,
   });
   mat.name = name;
   return mat;
