@@ -1,0 +1,46 @@
+# Optional: publish AVES to GitHub Pages on every push to main.
+#
+# You do not need this to get the game online. The simpler route is
+# Settings → Pages → "Deploy from a branch", which needs no workflow at all
+# and is what the README describes. This file is here for the case where you
+# want pushes to redeploy automatically.
+#
+# To use it: Settings → Pages → Source → "GitHub Actions".
+#
+# Action versions below are pinned to the majors that were current when this
+# was written and could not be re-checked from the environment that generated
+# it. If a run fails resolving one of them, bump the major.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; never cancel one halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          # The whole repo: it is 400 KB of static files and there is no
+          # build step to run.
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
