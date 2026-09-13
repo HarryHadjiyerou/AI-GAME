@@ -1,42 +1,25 @@
 # Assets
 
-Everything third-party is **streamed at runtime from its own CDN**. Nothing is
-copied into this repository, so there is no redistribution to license and the
-repo stays small. Every remote load has a procedural fallback, so the game still
-runs offline — it just looks different.
+**Almost nothing is fetched.** The look is generated at runtime: skies,
+terrain, water, vegetation, cloud, weather, the city and the first-person wings
+are all built from noise and a palette. There is no texture payload behind this
+game — the whole thing is a few hundred kilobytes of source plus three.js.
 
-All the hosts below serve `Access-Control-Allow-Origin: *`, which is what makes
-this possible from a browser at all.
+The one exception is three GLB bird models, used as distant silhouettes, and
+they are optional.
 
 ---
 
-## Poly Haven — CC0
+## What the game loads over the network
 
-<https://polyhaven.com> · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+| What | Where from | Size | If it fails |
+|---|---|---|---|
+| `three` + `three/addons` | jsDelivr, pinned to 0.180.0 | ~700 KB gzipped | nothing runs — this is the engine |
+| `Stork.glb`, `Parrot.glb`, `Flamingo.glb` | jsDelivr, from the three.js repo at r160 | ~300 KB total | flocks and the menu simply have no birds; everything else is unaffected |
 
-**HDRI skies.** One per world, at 1k, loaded through `RGBELoader` and run
-through `PMREMGenerator`. Each is both the visible backdrop and the image-based
-light, which is why a bird's pale underside picks up the colour of the water
-beneath it without anything being authored for it.
-
-| World | HDRI |
-|---|---|
-| Forest | `kloofendal_28d_misty_puresky` |
-| Coast | `blouberg_sunrise_2` |
-| High range | `drakensberg_solitary_mountain_puresky` |
-| City | `potsdamer_platz` |
-
-**PBR surfaces.** Diffuse, OpenGL-convention normal, and the packed `arm` map
-(red = ambient occlusion, green = roughness, blue = metalness) — a packing that
-happens to match exactly what three.js wants, so one file feeds three material
-slots.
-
-`forest_ground_04` · `aerial_grass_rock` · `rock_face_03` · `rocks_ground_02` ·
-`snow_02` · `coast_sand_01` · `bark_willow_02` · `brown_mud_leaves_01` ·
-`asphalt_02` · `concrete_wall_008`
-
-Roughly 8 MB per world at 1k. Turning off **Stream photoreal assets** in the
-settings swaps all of it for procedurally generated tiling textures.
+That is the complete list. Turning off **Load bird models from CDN** in the
+settings drops the second row, and the game then makes exactly one third-party
+request per session.
 
 ---
 
@@ -52,54 +35,55 @@ good at what this project asks of them — a readable silhouette with a convinci
 flap, seen at a distance — and structurally incapable of being the wings you fly
 behind, because there are no bones to fold, sweep or bank independently.
 
-So they circle the planet in the menu and fly as distant flocks in every world
-(`src/world/flock.js`), and the first-person wings are built from scratch in
-`src/flight/wings.js` as a three-segment arm carrying individually posed
-feathers. That is not a fallback; it is the right tool. A first-person wing has
-to respond to wingbeat phase, tuck, bank and g-load independently, and no baked
-morph sequence can do that.
+So they circle the planet in the menu (recoloured to near-silhouette, because a
+hot pink flamingo does not belong in this palette) and fly as distant flocks in
+every world (`src/world/flock.js`). The first-person wings are built from
+scratch in `src/flight/wings.js`: a three-segment arm carrying individually
+posed coverts, secondaries and primaries. That is not a fallback, it is the
+right tool — a first-person wing has to answer to wingbeat phase, tuck, bank and
+g-load independently, and no baked morph sequence can do that.
 
 ---
 
-## three.js — MIT
+## What used to be here
 
-<https://threejs.org> · pinned to `0.180.0` via the import map in `index.html`.
+The first version streamed, per world, a 1k HDRI sky from Poly Haven and about
+ten PBR texture sets — roughly 8 MB — and used the HDRI as both backdrop and
+image-based light.
 
-Renderer, loaders, and the `EffectComposer` post-processing stack.
+It was removed, and this is the honest reason: it did not look good. A
+photograph of a forest floor stretched over generated terrain, under a
+photograph of somebody else's sky, never resolved into a single picture. The
+sky did not agree with the ground, the ground did not agree with the water, and
+nothing agreed with the bird. It also cost the first ten seconds of every
+session, on a game whose entire pitch is that you open a URL on a phone and
+fly.
+
+The replacement is a stylised renderer (`src/core/style.js`) driven by four
+hand-authored palettes (`src/world/palette.js`): a banded sun term, a coloured
+shadow taken from the hemisphere, a rim light, and aerial perspective that
+dissolves distance into the palette's own horizon colour. Everything in the
+world — terrain, trees, water, buildings, wings, flocks — is shaded by that one
+model, which is why it all belongs to the same image. The environment map that
+lights the reflective surfaces is generated from the palette itself
+(`environmentFromPalette` in `src/world/sky.js`), so even the bounce light
+agrees with the sky it came from.
+
+Load time went from roughly ten seconds to under two, the look got better, and
+the licensing page got shorter. No part of that trade was a compromise.
 
 ---
 
-## Made in-engine
+## Generated in-repo
 
-No asset, no download, no licence:
+Everything else is authored in code and has no licence to carry:
 
-- All four height fields, and therefore all terrain, rivers, coastline,
-  mountains and the city's ground plane
-- The four-layer terrain splat, the water surface, the cloudscape and the
-  facade shader
-- Trees: trunk geometry, canopy cards, and the alpha-masked foliage sprites,
-  drawn to a canvas at load
-- The first-person wings, including the feather texture
-- The menu planet
-- All flight physics
-
----
-
-## Assets considered and not used
-
-Two CC0 libraries were obvious candidates for the vegetation and the city:
-
-- **Quaternius Ultimate Nature Pack** and **Downtown City MegaKit** —
-  <https://quaternius.com>, CC0
-- **Kenney Nature Kit** and **City Kit** — <https://kenney.nl>, CC0
-
-Both are genuinely good and both are worth doing. They are not wired in here for
-one practical reason: neither is served from a CORS-enabled CDN. Quaternius
-distributes through Google Drive and Kenney through a download endpoint on his
-own site, so in both cases the files would have to be downloaded by hand,
-committed into this repository, and redistributed — a different decision from
-everything else above, and one better made deliberately than by accident.
-
-The loader is ready for them. `Assets.birdModel()` already wraps `GLTFLoader`,
-and `Vegetation` takes prototypes as data, so dropping real GLB trees in means
-adding a manifest and a loader branch rather than restructuring anything.
+- Terrain height fields, erosion and biome masks (`src/world/terrain.js`)
+- Sky dome, cloud strata and the palette environment map (`src/world/sky.js`)
+- Gerstner-wave water with depth-shaded shallows (`src/world/water.js`)
+- Trees, scrub and grass, instanced from procedural sprites (`src/world/vegetation.js`)
+- The city, its traffic and its windows (`src/world/city.js`)
+- Weather: wind, gusts, rain, lightning (`src/world/weather.js`)
+- Thermal motes, floating islands and waterfalls (`src/world/spectacle.js`)
+- The first-person wings, feathers and all (`src/flight/wings.js`)
+- The menu planet, its clouds, atmosphere and stars (`src/ui/menu.js`)

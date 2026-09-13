@@ -38,6 +38,11 @@ const BirdVisionShader = {
     uWater:      { value: 0 },
     uWaterTint:  { value: new THREE.Color('#2d6b7a') },
     uFade:       { value: 0 },
+    uLift:       { value: new THREE.Color('#0d1626') },
+    uGain:       { value: new THREE.Color('#fff0dd') },
+    uSaturation: { value: 1.18 },
+    uContrast:   { value: 1.06 },
+    uFlash:      { value: 0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -50,7 +55,8 @@ const BirdVisionShader = {
     precision highp float;
     uniform sampler2D tDiffuse;
     uniform float uAspect, uFisheye, uSpeed, uBlur, uVignette, uAberration, uGrain, uTime, uWater, uFade;
-    uniform vec3  uWaterTint;
+    uniform float uSaturation, uContrast, uFlash;
+    uniform vec3  uWaterTint, uLift, uGain;
     varying vec2 vUv;
 
     float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -114,6 +120,20 @@ const BirdVisionShader = {
         col = mix(col, uWaterTint * (0.35 + 0.65 * dot(col, vec3(0.299, 0.587, 0.114))), uWater * 0.72);
       }
 
+      // ── colour grade ──
+      //
+      // Lift, gain, saturation, contrast — the four dials a colourist
+      // reaches for, and between them they do more for how a frame feels
+      // than any amount of extra geometry. Each world carries its own set,
+      // which is what makes the coast warm and the mountains cold when the
+      // underlying renderer is identical.
+      col = uLift + col * (uGain - uLift);
+      float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(luma), col, uSaturation);
+      col = (col - 0.5) * uContrast + 0.5;
+      col += uFlash;                      // lightning
+      col = max(col, vec3(0.0));
+
       float vig = 1.0 - uVignette * smoothstep(0.38, 1.28, r);
       col *= vig;
 
@@ -127,11 +147,40 @@ const BirdVisionShader = {
   `,
 };
 
+/**
+ * Quality tiers.
+ *
+ * Bloom is on at every level, including the lowest. It is not a luxury in
+ * this art direction — the sun, the glitter on the water and the lit windows
+ * all depend on it, and without it the whole thing looks like it is behind
+ * glass. What scales instead is render resolution and how much world gets
+ * streamed, which is where the frames actually go.
+ */
 export const QUALITY = {
-  low:    { scale: 0.70, bloom: false, shadows: false, shadowSize: 512,  samples: 0 },
-  medium: { scale: 0.85, bloom: false, shadows: true,  shadowSize: 1024, samples: 0 },
-  high:   { scale: 1.00, bloom: true,  shadows: true,  shadowSize: 2048, samples: 0 },
-  ultra:  { scale: 1.00, bloom: true,  shadows: true,  shadowSize: 2048, samples: 4 },
+  low: {
+    scale: 0.62, bloom: true, samples: 0,
+    terrainLod: 2.1, terrainBudget: 1, waterRings: 56, waterSegments: 96,
+    cloudScale: 0.45, vegScale: 0.5, cityScale: 0.6, traffic: 50,
+    motes: 320, rain: 900, flock: 5,
+  },
+  medium: {
+    scale: 0.82, bloom: true, samples: 0,
+    terrainLod: 2.6, terrainBudget: 2, waterRings: 76, waterSegments: 128,
+    cloudScale: 0.75, vegScale: 0.8, cityScale: 0.85, traffic: 110,
+    motes: 650, rain: 1800, flock: 8,
+  },
+  high: {
+    scale: 1.00, bloom: true, samples: 0,
+    terrainLod: 3.0, terrainBudget: 2, waterRings: 96, waterSegments: 160,
+    cloudScale: 1.0, vegScale: 1.0, cityScale: 1.0, traffic: 150,
+    motes: 900, rain: 2600, flock: 10,
+  },
+  ultra: {
+    scale: 1.00, bloom: true, samples: 4,
+    terrainLod: 3.6, terrainBudget: 3, waterRings: 112, waterSegments: 192,
+    cloudScale: 1.3, vegScale: 1.25, cityScale: 1.2, traffic: 220,
+    motes: 1400, rain: 3400, flock: 14,
+  },
 };
 
 export class BirdVision {
@@ -141,6 +190,9 @@ export class BirdVision {
     this.camera = camera;
     this.overlay = null;          // { scene, camera } drawn over the world
     this.quality = QUALITY[quality] ? quality : 'medium';
+    // The tier's own scale is the starting point; AutoQuality moves this at
+    // runtime without rebuilding anything.
+    this.scale = QUALITY[this.quality].scale;
 
     this._build();
     this.speed = 0;
@@ -154,8 +206,8 @@ export class BirdVision {
     const size = this.renderer.getSize(new THREE.Vector2());
 
     const target = new THREE.WebGLRenderTarget(
-      Math.max(1, Math.floor(size.x * q.scale)),
-      Math.max(1, Math.floor(size.y * q.scale)),
+      Math.max(1, Math.floor(size.x * this.scale)),
+      Math.max(1, Math.floor(size.y * this.scale)),
       {
         type: THREE.HalfFloatType,
         colorSpace: THREE.LinearSRGBColorSpace,
@@ -180,7 +232,12 @@ export class BirdVision {
     this.composer.addPass(this.overlayPass);
 
     if (q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.28, 0.75, 0.92);
+      this.bloom = new UnrealBloomPass(
+        new THREE.Vector2(size.x, size.y),
+        this._palette?.bloom ?? 0.5,   // strength
+        0.85,                          // radius
+        0.72                           // threshold — low, so sky and water bloom
+      );
       this.composer.addPass(this.bloom);
     } else {
       this.bloom = null;
@@ -196,6 +253,7 @@ export class BirdVision {
   setQuality(name) {
     if (!QUALITY[name] || name === this.quality) return QUALITY[this.quality];
     this.quality = name;
+    this.scale = QUALITY[name].scale;
     const o = this.overlay;
     this._build();
     if (o) this.setOverlay(o.scene, o.camera);
@@ -203,6 +261,19 @@ export class BirdVision {
   }
 
   setFisheye(v) { this.vision.uniforms.uFisheye.value = v; }
+
+  /** Apply a world's grade and bloom. */
+  setGrade(palette) {
+    const u = this.vision.uniforms;
+    const g = palette.grade ?? {};
+    if (g.lift) u.uLift.value.copy(g.lift);
+    if (g.gain) u.uGain.value.copy(g.gain);
+    if (g.saturation !== undefined) u.uSaturation.value = g.saturation;
+    if (g.contrast !== undefined) u.uContrast.value = g.contrast;
+    if (this.bloom && palette.bloom !== undefined) this.bloom.strength = palette.bloom;
+    this.renderer.toneMappingExposure = palette.exposure ?? 1;
+    this._palette = palette;
+  }
 
   /** Hand the wing pass its scene and camera, or null to switch it off. */
   setOverlay(scene, camera) {
@@ -213,15 +284,33 @@ export class BirdVision {
   }
 
   setSize(w, h) {
-    const q = QUALITY[this.quality];
+    this._w = w; this._h = h;
     this.composer.setSize(w, h);
-    this.composer.renderTarget1.setSize(Math.floor(w * q.scale), Math.floor(h * q.scale));
-    this.composer.renderTarget2.setSize(Math.floor(w * q.scale), Math.floor(h * q.scale));
+    const rw = Math.max(1, Math.floor(w * this.scale));
+    const rh = Math.max(1, Math.floor(h * this.scale));
+    this.composer.renderTarget1.setSize(rw, rh);
+    this.composer.renderTarget2.setSize(rw, rh);
     this.vision.uniforms.uAspect.value = w / Math.max(1, h);
     this.bloom?.setSize(w, h);
   }
 
-  render(dt, { speed = 0, water = 0, fade = 0 } = {}) {
+  /**
+   * Change the resolution the scene is rendered at, without a rebuild.
+   * This is the lever AutoQuality pulls; the composer keeps presenting at the
+   * full canvas size, so all that changes is how many pixels get shaded.
+   */
+  setRenderScale(scale) {
+    const s = Math.max(0.35, Math.min(1, scale));
+    if (Math.abs(s - this.scale) < 0.005) return;
+    this.scale = s;
+    const size = this.renderer.getSize(new THREE.Vector2());
+    this.setSize(this._w ?? size.x, this._h ?? size.y);
+  }
+
+  /** Bloom is the one pass cheap enough to keep and expensive enough to drop. */
+  setBloom(on) { if (this.bloom) this.bloom.enabled = on; }
+
+  render(dt, { speed = 0, water = 0, fade = 0, flash = 0 } = {}) {
     this.time += dt;
     const u = this.vision.uniforms;
     this.speed = damp(this.speed, clamp(speed, 0, 1), 0.25, dt);
@@ -230,6 +319,7 @@ export class BirdVision {
     u.uWater.value = this.water;
     u.uTime.value = this.time;
     u.uFade.value = fade;
+    u.uFlash.value = flash;
     this.composer.render(dt);
   }
 

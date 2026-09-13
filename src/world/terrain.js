@@ -7,121 +7,79 @@
    frame budget and cached, and each carries a skirt so LOD seams
    never show as cracks of sky.
 
-   Shading is a four-layer rule-based splat (base / slope / altitude /
-   shore) injected into a MeshStandardMaterial, so it keeps real PBR
-   lighting from the HDRI environment.
+   Shading is stylised rather than physical — an altitude ramp from the
+   world's palette, banded sunlight and a coloured rim, with no image
+   textures and no shadow maps. See core/style.js for why.
    ═══════════════════════════════════════════════════════════ */
 
 import * as THREE from 'three';
-import { clamp, smooth } from '../core/noise.js';
+import { clamp } from '../core/noise.js';
 
 const GRID = 24;                    // quads per patch edge
 
-let _white = null;
-/** 1×1 white texture used to keep unused sampler slots legal. */
-function whiteTexture() {
-  if (!_white) {
-    _white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
-    _white.needsUpdate = true;
-  }
-  return _white;
-}
+/* ── stylised terrain surface ──────────────────────────────
+   Colour comes from the world's palette rather than from photographs:
+   a four-stop ramp by altitude, rock wherever it is steep enough that
+   soil would not stay, snow above a line, and a band of shore at the
+   waterline. Then a little large-scale noise so no two hillsides are
+   the same flat swatch of green.
 
-/* ── the splat shader, injected into MeshStandardMaterial ─── */
+   Contour banding is the one deliberate artifice — a faint darkening
+   every few dozen metres of altitude, like a painted relief map. It
+   costs one sine and it makes height legible from the air, which
+   matters when height is the resource you are managing. */
 
-const SPLAT_PARS = /* glsl */`
-  uniform sampler2D uTex0, uTex1, uTex2, uTex3;
-  uniform sampler2D uNrm0, uNrm1, uNrm2, uNrm3;
-  uniform sampler2D uArm0, uArm1, uArm2, uArm3;
-  uniform vec4  uScale;          // world-uv scale per layer
-  uniform vec2  uSlopeRange;     // slope 0..1 fade into layer 1
-  uniform vec2  uSnowRange;      // world height fade into layer 2
-  uniform vec2  uShoreRange;     // world height fade into layer 3
-  uniform vec3  uTint0, uTint1, uTint2, uTint3;
-  uniform float uMacroScale;
-  uniform float uMacroStrength;
-  varying vec3  vAvesNormalW;
-
-  // cheap value noise for macro variation / threshold jitter
-  float avesHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float avesVnoise(vec2 p){
-    vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(avesHash(i), avesHash(i + vec2(1,0)), f.x),
-               mix(avesHash(i + vec2(0,1)), avesHash(i + vec2(1,1)), f.x), f.y);
-  }
-  float avesFbm(vec2 p){
-    float v = 0.0, a = 0.5;
-    for (int i = 0; i < 4; i++){ v += a * avesVnoise(p); p *= 2.03; a *= 0.5; }
-    return v;
-  }
-
-  // Blend two octaves of the same tile to hide the repeat.
-  vec4 avesTile(sampler2D t, vec2 uv){
-    return mix(texture2D(t, uv), texture2D(t, uv * 0.2413 + 0.37), 0.35);
-  }
-
-  vec4 avesWeights(vec3 wp, vec3 n){
-    float slope = 1.0 - clamp(n.y, 0.0, 1.0);
-    float jitter = (avesFbm(wp.xz * 0.0055) - 0.5);
-
-    float wRock  = smoothstep(uSlopeRange.x + jitter * 0.10, uSlopeRange.y + jitter * 0.10, slope);
-    float wSnow  = smoothstep(uSnowRange.x  + jitter * 90.0, uSnowRange.y  + jitter * 90.0, wp.y);
-    float wShore = 1.0 - smoothstep(uShoreRange.x + jitter * 5.0, uShoreRange.y + jitter * 5.0, wp.y);
-
-    wSnow  *= 1.0 - wRock * 0.55;      // exposed crags stay bare
-    wShore *= 1.0 - wRock * 0.85;
-    float wBase = max(0.0, 1.0 - wRock - wSnow - wShore);
-    vec4 w = vec4(wBase, wRock, wSnow, wShore);
-    return w / max(1e-4, w.x + w.y + w.z + w.w);
-  }
+const TERRAIN_PARS = /* glsl */`
+  uniform vec3  uLow, uMid, uHigh, uPeak;
+  uniform vec3  uRock, uSnow, uShore;
+  uniform vec2  uSlopeRange, uSnowRange, uShoreRange;
+  uniform vec2  uHeightRange;
+  uniform float uMacroScale, uMacroStrength;
+  uniform float uContour, uContourSpacing;
+  uniform float uGrain;
 `;
 
-const SPLAT_MAP = /* glsl */`
-  vec3 wp = vAvesWorld;
-  vec3 wn = normalize(vAvesNormalW);
-  vec4 w = avesWeights(wp, wn);
+const TERRAIN_ALBEDO = /* glsl */`
+  vec3 wp = vWorld;
+  float slope = 1.0 - clamp(N.y, 0.0, 1.0);
 
-  vec4 c0 = avesTile(uTex0, wp.xz * uScale.x) * vec4(uTint0, 1.0);
-  vec4 c1 = avesTile(uTex1, wp.xz * uScale.y) * vec4(uTint1, 1.0);
-  vec4 c2 = avesTile(uTex2, wp.xz * uScale.z) * vec4(uTint2, 1.0);
-  vec4 c3 = avesTile(uTex3, wp.xz * uScale.w) * vec4(uTint3, 1.0);
+  // Break every threshold with noise, or the snow line and the rock line
+  // become two hard contours running across the landscape.
+  float jitter = sFbm(wp.xz * 0.0035) - 0.5;
 
-  vec4 splat = c0 * w.x + c1 * w.y + c2 * w.z + c3 * w.w;
+  float hNorm = clamp((wp.y - uHeightRange.x) / max(1.0, uHeightRange.y - uHeightRange.x), 0.0, 1.0);
+  hNorm = clamp(hNorm + jitter * 0.10, 0.0, 1.0);
 
-  float macro = avesFbm(wp.xz * uMacroScale);
-  splat.rgb *= mix(1.0 - uMacroStrength, 1.0 + uMacroStrength, macro);
+  // Altitude ramp, four stops.
+  vec3 ground = mix(uLow, uMid, smoothstep(0.0, 0.38, hNorm));
+  ground = mix(ground, uHigh, smoothstep(0.32, 0.68, hNorm));
+  ground = mix(ground, uPeak, smoothstep(0.62, 0.95, hNorm));
 
-  diffuseColor *= splat;
-`;
+  float rockW = smoothstep(uSlopeRange.x + jitter * 0.12, uSlopeRange.y + jitter * 0.12, slope);
+  float snowW = smoothstep(uSnowRange.x + jitter * 140.0, uSnowRange.y + jitter * 140.0, wp.y)
+              * (1.0 - rockW * 0.55);
+  float shoreW = (1.0 - smoothstep(uShoreRange.x + jitter * 6.0, uShoreRange.y + jitter * 6.0, wp.y))
+               * (1.0 - rockW * 0.8);
 
-const SPLAT_ROUGH = /* glsl */`
-  vec4 a0 = texture2D(uArm0, wp.xz * uScale.x);
-  vec4 a1 = texture2D(uArm1, wp.xz * uScale.y);
-  vec4 a2 = texture2D(uArm2, wp.xz * uScale.z);
-  vec4 a3 = texture2D(uArm3, wp.xz * uScale.w);
-  vec4 arm = a0 * w.x + a1 * w.y + a2 * w.z + a3 * w.w;
-  float roughnessFactor = roughness * clamp(arm.g * 1.15, 0.25, 1.0);
-  diffuseColor.rgb *= mix(1.0, arm.r, 0.55);       // baked cavity AO
-`;
+  albedo = ground;
+  albedo = mix(albedo, uRock, rockW);
+  albedo = mix(albedo, uSnow, snowW);
+  albedo = mix(albedo, uShore, clamp(shoreW, 0.0, 1.0));
 
-const SPLAT_ROUGH_FLAT = /* glsl */`
-  float roughnessFactor = roughness;
-`;
+  // Large-scale variation so a hillside is not one swatch.
+  float macro = sFbm(wp.xz * uMacroScale);
+  albedo *= mix(1.0 - uMacroStrength, 1.0 + uMacroStrength, macro);
 
-const SPLAT_NORMAL = /* glsl */`
-  vec3 n0 = texture2D(uNrm0, wp.xz * uScale.x).xyz * 2.0 - 1.0;
-  vec3 n1 = texture2D(uNrm1, wp.xz * uScale.y).xyz * 2.0 - 1.0;
-  vec3 n2 = texture2D(uNrm2, wp.xz * uScale.z).xyz * 2.0 - 1.0;
-  vec3 n3 = texture2D(uNrm3, wp.xz * uScale.w).xyz * 2.0 - 1.0;
-  vec3 mapN = normalize(n0 * w.x + n1 * w.y + n2 * w.z + n3 * w.w);
-  // Every layer UV is a scalar multiple of world.xz, so one derivative frame
-  // serves all of them once the result is renormalised. three has already
-  // built its own tangent frame from the geometry UVs, which for terrain are
-  // all zero, so this replaces that frame rather than reusing it.
-  mat3 avesTbn = getTangentFrame( - vViewPosition, normal, wp.xz * uScale.x );
-  mapN.xy *= 0.85;
-  normal = normalize( avesTbn * mapN );
+  // Fine grain, fading out with distance so it never aliases into noise.
+  float grain = sNoise(wp.xz * 0.9) - 0.5;
+  albedo *= 1.0 + grain * uGrain * (1.0 - smoothstep(150.0, 900.0, vDepth));
+
+  // Painted contour lines.
+  float band = sin(wp.y * 6.2831853 / uContourSpacing);
+  albedo *= 1.0 - smoothstep(0.86, 1.0, abs(band)) * uContour;
+
+  // Valleys sit in their own shade; ridges catch the light.
+  ao = mix(1.0, 0.72, smoothstep(0.25, 0.9, slope) * 0.6);
 `;
 
 /* ═══════════════════════════════════════════════════════════ */
@@ -134,8 +92,8 @@ export class Terrain {
    * @param {number} opts.maxDepth    subdivision limit
    * @param {number} opts.lodBias     higher = more detail nearer
    */
-  constructor(atmosphere, opts) {
-    this.atmo = atmosphere;
+  constructor(opts) {
+    this.style = opts.style;
     this.height = opts.height;
     this.worldSize = opts.worldSize ?? 32768;
     this.maxDepth = opts.maxDepth ?? 7;
@@ -153,76 +111,33 @@ export class Terrain {
   }
 
   _material(opts) {
-    const t = opts.textures;               // { base, slope, alt, shore }
-    const white = whiteTexture();
-    const pick = (s, k) => (s?.[k] ?? null);
-
-    // Streaming can fail per-texture; only take the normal/ARM path when every
-    // layer actually has maps, otherwise the shader would sample white noise.
-    const hasNormals = [t.base, t.slope, t.alt, t.shore]
-      .every((l) => l && l.normalMap && l.armMap);
-
-    this.splatUniforms = {
-      uTex0: { value: t.base.map },  uTex1: { value: t.slope.map },
-      uTex2: { value: t.alt.map },   uTex3: { value: t.shore.map },
-      uNrm0: { value: pick(t.base, 'normalMap') || white },
-      uNrm1: { value: pick(t.slope, 'normalMap') || white },
-      uNrm2: { value: pick(t.alt, 'normalMap') || white },
-      uNrm3: { value: pick(t.shore, 'normalMap') || white },
-      uArm0: { value: pick(t.base, 'armMap') || white },
-      uArm1: { value: pick(t.slope, 'armMap') || white },
-      uArm2: { value: pick(t.alt, 'armMap') || white },
-      uArm3: { value: pick(t.shore, 'armMap') || white },
-      uScale: { value: new THREE.Vector4(...(opts.layerScale ?? [0.06, 0.05, 0.04, 0.08])) },
-      uSlopeRange: { value: new THREE.Vector2(...(opts.slopeRange ?? [0.32, 0.62])) },
-      uSnowRange:  { value: new THREE.Vector2(...(opts.snowRange ?? [9e5, 9e5 + 1])) },
+    const p = opts.palette;
+    const ramp = p.ground;
+    this.terrainUniforms = {
+      uLow: { value: ramp[0].clone() },
+      uMid: { value: ramp[1].clone() },
+      uHigh: { value: ramp[2].clone() },
+      uPeak: { value: ramp[3].clone() },
+      uRock: { value: (opts.rock ?? p.rock).clone() },
+      uSnow: { value: (opts.snow ?? p.snow).clone() },
+      uShore: { value: (opts.shore ?? ramp[0]).clone() },
+      uSlopeRange: { value: new THREE.Vector2(...(opts.slopeRange ?? [0.30, 0.62])) },
+      uSnowRange: { value: new THREE.Vector2(...(opts.snowRange ?? [9e5, 9e5 + 1])) },
       uShoreRange: { value: new THREE.Vector2(...(opts.shoreRange ?? [-9e5, -9e5 + 1])) },
-      uTint0: { value: new THREE.Color(opts.tints?.[0] ?? '#ffffff') },
-      uTint1: { value: new THREE.Color(opts.tints?.[1] ?? '#ffffff') },
-      uTint2: { value: new THREE.Color(opts.tints?.[2] ?? '#ffffff') },
-      uTint3: { value: new THREE.Color(opts.tints?.[3] ?? '#ffffff') },
-      uMacroScale:    { value: opts.macroScale ?? 0.0012 },
-      uMacroStrength: { value: opts.macroStrength ?? 0.22 },
+      uHeightRange: { value: new THREE.Vector2(...(opts.heightRange ?? [0, 1000])) },
+      uMacroScale: { value: opts.macroScale ?? 0.0011 },
+      uMacroStrength: { value: opts.macroStrength ?? 0.16 },
+      uContour: { value: opts.contour ?? 0.055 },
+      uContourSpacing: { value: opts.contourSpacing ?? 46 },
+      uGrain: { value: opts.grain ?? 0.10 },
     };
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 1.0,
-      metalness: 0.0,
-      envMapIntensity: opts.envIntensity ?? 1.0,
-      dithering: true,
+    return opts.style.make({
+      name: 'terrain',
+      pars: TERRAIN_PARS,
+      albedo: TERRAIN_ALBEDO,
+      extra: this.terrainUniforms,
     });
-    // Assigning these switches on USE_MAP / USE_NORMALMAP_TANGENTSPACE, which is
-    // what makes `<map_fragment>` and `getTangentFrame()` exist for us to use.
-    // The textures themselves are never sampled through the stock code path.
-    mat.map = t.base.map;
-    if (hasNormals) {
-      mat.normalMap = t.base.normalMap;
-      mat.normalScale = new THREE.Vector2(1, 1);
-    }
-
-    this.atmo.patch(mat, {
-      tag: `terrain${hasNormals ? '-pbr' : '-flat'}`,
-      onShader: (shader) => {
-        Object.assign(shader.uniforms, this.splatUniforms);
-
-        shader.vertexShader = 'varying vec3 vAvesNormalW;\n' + shader.vertexShader;
-        shader.vertexShader = shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          '#include <begin_vertex>\n  vAvesNormalW = normalize( mat3( modelMatrix ) * normal );'
-        );
-
-        shader.fragmentShader = SPLAT_PARS + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader
-          .replace('#include <map_fragment>', SPLAT_MAP)
-          .replace('#include <roughnessmap_fragment>', hasNormals ? SPLAT_ROUGH : SPLAT_ROUGH_FLAT);
-        if (hasNormals) {
-          shader.fragmentShader =
-            shader.fragmentShader.replace('#include <normal_fragment_maps>', SPLAT_NORMAL);
-        }
-      },
-    });
-    return mat;
   }
 
   /* ── quadtree selection ─────────────────────────────────── */
@@ -391,4 +306,4 @@ export class Terrain {
 }
 
 export { smin, riverDistance } from './terrain-field.js';
-export { smooth, clamp };
+export { clamp };

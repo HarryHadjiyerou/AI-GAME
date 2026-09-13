@@ -38,7 +38,7 @@ export const BIRDS = {
     bodyArea: 0.0065,
     groundClearance: 1.1, seed: 11,
 
-    wingColor: '#6d5334', wingTipColor: '#33281c', wingSweep: 0.62,
+    wingColor: '#6d5334', wingTipColor: '#33281c', wingSweep: 0.10,
     thermalScale: 0.0019, wingSpan: 1.2,
   },
 
@@ -69,7 +69,7 @@ export const BIRDS = {
     groundClearance: 1.0, seed: 23,
     maxDiveDepth: 9,
 
-    wingColor: '#e8e9ec', wingTipColor: '#26282c', wingSweep: 0.58,
+    wingColor: '#e8e9ec', wingTipColor: '#26282c', wingSweep: 0.09,
     thermalScale: 0.0013, wingSpan: 1.35,
   },
 
@@ -99,7 +99,7 @@ export const BIRDS = {
     bodyArea: 0.0900,
     groundClearance: 1.6, seed: 31,
 
-    wingColor: '#2e2a28', wingTipColor: '#141313', wingSweep: 0.52,
+    wingColor: '#2e2a28', wingTipColor: '#141313', wingSweep: 0.07,
     thermalScale: 0.0010, wingSpan: 3.0,
   },
 
@@ -129,7 +129,7 @@ export const BIRDS = {
     bodyArea: 0.0045,
     groundClearance: 0.8, seed: 43,
 
-    wingColor: '#7e858f', wingTipColor: '#3a3f47', wingSweep: 0.70,
+    wingColor: '#7e858f', wingTipColor: '#3a3f47', wingSweep: 0.13,
     thermalScale: 0.0026, wingSpan: 0.66,
   },
 };

@@ -20,7 +20,7 @@ export class Flock {
   /**
    * @param {object} model  { scene, animations } from Assets.birdModel()
    */
-  constructor(atmo, model, opts = {}) {
+  constructor(style, model, opts = {}) {
     this.group = new THREE.Group();
     this.birds = [];
     this.mixers = [];
@@ -35,16 +35,26 @@ export class Flock {
 
     for (let i = 0; i < count; i++) {
       const obj = model.scene.clone(true);
+      // One stylised silhouette material for all of them: at the distance
+      // these are seen, the model's own textures contribute nothing and the
+      // shape is the whole read.
+      if (!this._material) {
+        this._material = style.make({
+          name: 'flock',
+          pars: 'uniform vec3 uBody;',
+          albedo: `
+            albedo = uBody;
+            // Underside pale, back dark — countershading, which is what makes
+            // a distant bird legible against both sky and ground.
+            albedo *= mix(1.45, 0.55, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
+          `,
+          extra: { uBody: { value: new THREE.Color(opts.body ?? '#2e2a30') } },
+        });
+      }
       obj.traverse((o) => {
         if (!o.isMesh) return;
-        const m = o.material.clone();
-        m.color?.multiplyScalar(opts.tint ?? 1);
-        m.roughness = 0.85;
-        m.metalness = 0;
-        atmo.patch(m, { tag: 'flock' });
-        o.material = m;
+        o.material = this._material;
         o.frustumCulled = false;
-        // The sample models are built at roughly 100× life size.
         o.castShadow = false;
       });
       const s = this.scale * (0.75 + r() * 0.6) * 0.012;
@@ -101,7 +111,7 @@ export class Flock {
   }
 
   dispose() {
-    this.group.traverse((o) => { o.geometry?.dispose(); o.material?.dispose?.(); });
+    this.group.traverse((o) => o.geometry?.dispose());
     this.group.removeFromParent();
   }
 }

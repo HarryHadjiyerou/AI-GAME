@@ -59,25 +59,42 @@ or anything equivalent — `python3 -m http.server 8080`, `npx serve .`. Then op
 
 ## Controls
 
-**Phone — tilt.** The phone *is* the bird.
+**Phone — two floating sticks.**
 
 | | |
 |---|---|
-| Roll the phone left / right | Bank, and therefore turn |
-| Tip it away from you | Nose down |
-| Tip it back towards you | Nose up |
-| Tap | One wingbeat |
-| Hold | Tuck the wings — dive |
-| Two-finger tap | Re-zero the tilt neutral point |
+| Left stick | Steer. Push it over to bank; pull back to raise the nose. |
+| Right stick | Look around, without changing course |
+| FLAP | One wingbeat. Hold for several. |
+| DIVE | Fold the wings and drop |
+
+Both sticks are floating: they appear wherever your thumb lands and follow it if
+you drag past the edge, so you never have to look down to find one. Tilt
+controls are still there under **Settings → Tilt the phone to fly**, where they
+replace the left stick — but they are no longer the default, because a stick you
+can see beats a sensor you have to learn.
 
 iOS only hands over the motion sensors after an explicit permission prompt, and
-only from inside a user gesture, so AVES asks on the **Take flight** button. If
-you decline, or the device has no sensor, dragging on the screen does the same
-job.
+only from inside a user gesture, so AVES asks the moment you enable tilt.
 
 **Desktop.** `A`/`D` or `←`/`→` bank, `W`/`S` or `↑`/`↓` pitch, `Space` flaps,
 `Shift` tucks, mouse drag looks around. `Esc` returns to the menu, `P` hides the
-interface for screenshots, `F` shows a performance readout.
+interface for screenshots, `F` shows a performance readout. A gamepad works too:
+left stick steers, right stick looks, `A` or the right trigger beats.
+
+**Flight assistance.** Three levels in the settings, defaulting to *Balanced*:
+
+| | |
+|---|---|
+| Serene | The bird flies itself between your inputs. It will not hit the ground. |
+| Balanced | Holds a glide when you let go, and pulls up if you stop paying attention |
+| Wild | Nothing between you and the air |
+
+This is a controller, not a rail. It reads total energy — a surplus of speed may
+be spent climbing, a deficit has to be repaid — looks four and a half seconds
+down the projected flight path for terrain, feeds forward the extra lift a bank
+needs so a turn does not sag, and rolls out of the bank while it recovers. At
+*Wild* it does none of it.
 
 ---
 
@@ -169,10 +186,12 @@ src/
 ├── config/birds.js       the four birds: mass, wing area, coefficients, feel
 ├── core/
 │   ├── noise.js          simplex, fBm, ridged, domain warp  (no dependencies)
-│   ├── assets.js         CDN streaming + procedural fallbacks for everything
+│   ├── assets.js         the three GLB birds, and the procedural sprites
 │   ├── atmosphere.js     planet curvature + fog, injected into every material
 │   ├── postfx.js         fisheye, peripheral blur, speed streak, vignette
-│   └── input.js          tilt / drag / keyboard, iOS permission flow
+│   ├── input.js          sticks / keyboard / gamepad / tilt, iOS permission flow
+│   ├── style.js          the shading model every material in the game shares
+│   └── quality.js        watches the frame rate and moves the render scale
 ├── flight/
 │   ├── physics.js        the flight model
 │   ├── camera.js         head stabilisation, saccades, FOV
@@ -181,17 +200,26 @@ src/
 │   ├── fields.js         the four height fields  (no three.js — pure functions)
 │   ├── terrain.js        quadtree LOD mesh + four-layer splat shader
 │   ├── water.js          Gerstner waves, depth ramp, shore foam
-│   ├── sky.js            HDRI environment, sun, wrapping billboard cloudscape
+│   ├── sky.js            procedural sky dome, sun, cloud strata, palette IBL
 │   ├── vegetation.js     instanced trees in tiles, with wind
 │   ├── city.js           procedural blocks, facade shader, traffic
 │   ├── flock.js          the GLB birds, as distant company
+│   ├── palette.js        four times of day, as colour
+│   ├── weather.js        six weather states, wind, gusts, rain, lightning
+│   ├── spectacle.js      visible thermals, floating islands, waterfalls
 │   └── worlds.js         assembles the four worlds
+├── flight/
+│   └── assist.js         energy controller, terrain look-ahead, bank compensation
 └── ui/
     ├── menu.js           the mini planet
+    ├── touch.js          floating dual sticks
     └── hud.js            gauges
 
 tools/
 ├── flight-test.js        wind tunnel for the flight model      (npm test)
+├── assist-test.js        does the assist actually stop you hitting the ground
+├── quality-test.js       the adaptive-quality controller, against scripted frame rates
+├── lint.js               module parse, GLSL reserved words, template literals
 ├── terrain-test.js       statistical checks on the height fields
 └── smoke.mjs             headless browser: boots, launches each world, flies it
 ```
@@ -206,23 +234,28 @@ tested on their own — see `tools/terrain-test.js`.
 
 ## Assets
 
-Everything third-party is streamed live from its own CDN at runtime and is CC0
-or otherwise free to use. Nothing is redistributed in this repository. See
-[`docs/ASSETS.md`](docs/ASSETS.md) for the full list, the licences, and why the
-downloaded bird models are used where they are.
+Almost nothing is downloaded. The sky, the terrain, the water, the vegetation,
+the city, the weather and the wings are all generated as the game runs, from
+noise and a palette. The complete list of remote requests is three.js, and three
+GLB bird models totalling about 300 KB that are used for distant flocks and are
+optional.
 
-If the network is unavailable, or you turn streaming off in the settings, the
-game still flies — it just looks hand-painted instead of photographed. Every
-remote load has a procedural fallback.
+An earlier version streamed roughly 8 MB of HDRI and PBR texture per world from
+Poly Haven. It was removed — it cost the first ten seconds of every session and
+it looked worse, because a photographed ground under a photographed sky over
+generated terrain never resolves into one picture. See
+[`docs/ASSETS.md`](docs/ASSETS.md) for the licences and the full reasoning.
 
 ---
 
 ## Tests
 
 ```bash
-npm test                  # flight model + height fields
+npm test                  # lint + flight model + assist + height fields
 npm run test:flight       # glide ratios, stoops, turns, stalls, thermals
 npm run test:terrain      # relief, water coverage, spawn safety, sampling cost
+npm run test:assist       # the assist: recoveries, no ground contact, no oscillation
+npm run test:quality      # adaptive quality: backs off, climbs back, never pumps
 npm run test:smoke        # headless Chromium: boots and flies all four worlds
 node tools/smoke.mjs hawk # ... or just one
 ```

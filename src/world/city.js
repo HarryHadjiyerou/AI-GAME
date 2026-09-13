@@ -13,94 +13,76 @@
    ═══════════════════════════════════════════════════════════ */
 
 import * as THREE from 'three';
-import { Noise, rng, clamp, smooth } from '../core/noise.js';
+import { Noise, rng, clamp } from '../core/noise.js';
+
+/* ── facades, generated in the shader ──────────────────────
+   Every window on every tower comes from world position and face
+   normal: no textures, no UV layout, no per-building work. A forty
+   storey tower and a corner shop share one draw call and still get
+   windows the same size, because the grid is in metres.
+
+   At blue hour this is the whole look — dark massing, warm grid,
+   and the rim light picking out the edges of the towers against the
+   sky. The lights coming on is the thing that makes a city feel
+   like somewhere people live rather than a heightfield of boxes. */
 
 const FACADE_PARS = /* glsl */`
-  uniform float uNight;
-  uniform float uWinW;      // window cell width  (metres)
-  uniform float uWinH;      // window cell height (metres)
-  uniform vec3  uWindowLit;
-  uniform vec3  uGlassDay;
-  varying vec3  vFacadeNormalW;
+  uniform float uNight, uWinW, uWinH;
+  uniform vec3  uWindowLit, uGlassDay, uConcrete, uRoof;
+  varying vec3  vTint;
 
   float fHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float fHash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 `;
 
-const FACADE_MAP = /* glsl */`
-  vec3 wp = vAvesWorld;
-  vec3 wn = normalize(vFacadeNormalW);
-  #ifdef USE_COLOR
-    vec3 tint = diffuseColor.rgb * vColor;
-  #else
-    vec3 tint = diffuseColor.rgb;
-  #endif
+const FACADE_ALBEDO = /* glsl */`
+  vec3 wp = vWorld;
+  vec3 tint = vTint;
 
-  if (abs(wn.y) > 0.5) {
-    // ── roof: asphalt and gravel, with plant rooms and vents scattered on it ──
+  if (abs(N.y) > 0.5) {
+    // ── roof: gravel and plant rooms, seen from above more than anything
+    //    else in this world, so it gets more than a flat colour ──
     vec2 cell = floor(wp.xz / 2.4);
-    float grit = fHash(cell * 1.7) * 0.14 + fHash(wp.xz * 0.7) * 0.07;
-    vec3 roof = tint * 0.26 + vec3(0.02) + vec3(grit * 0.22);
-    // Plant rooms: a few per roof, not a chequerboard.
+    float grit = fHash(cell * 1.7) * 0.16 + fHash(wp.xz * 0.7) * 0.08;
+    vec3 roof = uRoof * (0.8 + grit);
     vec2 big = floor(wp.xz / 11.0);
-    float block = step(0.86, fHash(big * 2.3));
-    roof = mix(roof, tint * 0.48 + vec3(0.05), block);
-    // A dark parapet line where the roof meets the edge reads from the air.
-    diffuseColor.rgb = roof;
+    roof = mix(roof, uRoof * 1.5, step(0.86, fHash(big * 2.3)));
+    albedo = roof * (0.65 + tint.g * 0.6);
+    ao = 0.9;
   } else {
-    // ── facade: pick the axis the wall faces and lay out a window grid ──
-    float u = abs(wn.x) > abs(wn.z) ? wp.z : wp.x;
+    // ── facade: pick the axis this wall faces and lay a window grid on it ──
+    float u = abs(N.x) > abs(N.z) ? wp.z : wp.x;
     float v = wp.y;
-
     vec2 cell = vec2(floor(u / uWinW), floor(v / uWinH));
     vec2 f = vec2(fract(u / uWinW), fract(v / uWinH));
 
-    // Mullion / spandrel margins, in cell-local units.
-    float glassX = smoothstep(0.16, 0.24, f.x) * (1.0 - smoothstep(0.76, 0.84, f.x));
-    float glassY = smoothstep(0.22, 0.30, f.y) * (1.0 - smoothstep(0.74, 0.82, f.y));
+    float glassX = smoothstep(0.15, 0.23, f.x) * (1.0 - smoothstep(0.77, 0.85, f.x));
+    float glassY = smoothstep(0.20, 0.29, f.y) * (1.0 - smoothstep(0.75, 0.83, f.y));
     float glass = glassX * glassY;
 
-    // Ground floors are shopfronts: taller glazing, no grid.
-    float street = 1.0 - smoothstep(4.0, 8.0, wp.y);
+    // Ground floors are shopfronts: full-height glazing, no grid.
+    float street = 1.0 - smoothstep(4.0, 9.0, wp.y);
     glass = mix(glass, glassX, street);
 
-    float lit = step(1.0 - uNight * 0.55, fHash(cell + vec2(wn.x * 7.0, wn.z * 13.0)));
-    float dim = 0.55 + 0.45 * fHash(cell * 3.1 + 5.0);
+    float lit = step(1.0 - uNight * 0.62, fHash(cell + vec2(N.x * 7.0, N.z * 13.0)));
+    float warmth = 0.55 + 0.45 * fHash(cell * 3.1 + 5.0);
 
-    vec3 wall = tint * (0.80 + 0.20 * fHash(cell * 0.31));
-    // Horizontal banding: floor slabs read from a long way off.
-    wall *= 1.0 - smoothstep(0.94, 1.0, f.y) * 0.35;
+    vec3 wall = uConcrete * tint * (0.82 + 0.18 * fHash(cell * 0.31));
+    // Floor slabs, so the storeys read from a long way off.
+    wall *= 1.0 - smoothstep(0.93, 1.0, f.y) * 0.38;
 
-    vec3 glassCol = mix(uGlassDay * (0.5 + 0.5 * fHash(cell * 9.7)),
-                        uWindowLit * dim, lit * uNight);
+    // Unlit glass is dark: at dusk most of a facade is black mirror, and the
+    // contrast against the few lit windows is the entire effect.
+    vec3 glassCol = mix(uGlassDay, uWindowLit * warmth * 0.5, lit * uNight);
+    albedo = mix(wall, glassCol * 0.5, glass);
 
-    diffuseColor.rgb = mix(wall, glassCol, glass);
-  }
-`;
+    // Lit windows are their own light source — but a restrained one. Bloom
+    // multiplies whatever it is given, and a city where every window is at
+    // full emissive stops being a city and becomes a wall of light with
+    // buildings somewhere behind it.
+    emissive += uWindowLit * warmth * glass * lit * uNight * 0.42;
 
-const FACADE_ROUGH = /* glsl */`
-  float roughnessFactor = roughness;
-  if (abs(normalize(vFacadeNormalW).y) <= 0.5) {
-    float u2 = abs(vFacadeNormalW.x) > abs(vFacadeNormalW.z) ? vAvesWorld.z : vAvesWorld.x;
-    vec2 f2 = vec2(fract(u2 / uWinW), fract(vAvesWorld.y / uWinH));
-    float g2 = smoothstep(0.16, 0.24, f2.x) * (1.0 - smoothstep(0.76, 0.84, f2.x))
-             * smoothstep(0.22, 0.30, f2.y) * (1.0 - smoothstep(0.74, 0.82, f2.y));
-    roughnessFactor = mix(roughnessFactor, 0.06, g2);   // glass
-  }
-`;
-
-const FACADE_EMISSIVE = /* glsl */`
-  {
-    vec3 wnE = normalize(vFacadeNormalW);
-    if (abs(wnE.y) <= 0.5 && uNight > 0.01) {
-      float uE = abs(wnE.x) > abs(wnE.z) ? vAvesWorld.z : vAvesWorld.x;
-      vec2 cE = vec2(floor(uE / uWinW), floor(vAvesWorld.y / uWinH));
-      vec2 fE = vec2(fract(uE / uWinW), fract(vAvesWorld.y / uWinH));
-      float gE = smoothstep(0.16, 0.24, fE.x) * (1.0 - smoothstep(0.76, 0.84, fE.x))
-               * smoothstep(0.22, 0.30, fE.y) * (1.0 - smoothstep(0.74, 0.82, fE.y));
-      float litE = step(1.0 - uNight * 0.55, fHash(cE + vec2(wnE.x * 7.0, wnE.z * 13.0)));
-      totalEmissiveRadiance += uWindowLit * gE * litE * uNight * 1.6;
-    }
+    // Streets are in shadow long before the tops of the towers are.
+    ao = mix(0.55, 1.0, smoothstep(0.0, 60.0, wp.y));
   }
 `;
 
@@ -114,9 +96,8 @@ export class City {
    * @param {(x,z)=>boolean} opts.isPark       blocks to leave green
    * @param {(x,z)=>boolean} opts.isWater      blocks to leave empty
    */
-  constructor(atmo, assets, opts = {}) {
-    this.atmo = atmo;
-    this.assets = assets;
+  constructor(style, opts = {}) {
+    this.style = style;
     this.height = opts.height;
     this.block = opts.block ?? 96;
     this.street = opts.street ?? 26;
@@ -159,58 +140,75 @@ export class City {
   }
 
   _facadeMaterial(opts) {
-    const concrete = opts.concreteTexture;
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 0.85,
-      metalness: 0.05,
-      emissive: new THREE.Color(0x000000),
-      map: concrete?.map ?? null,
+    const p = opts.palette;
+    this.facadeUniforms = {
+      uNight: { value: opts.night ?? p.night ?? 0.55 },
+      uWinW: { value: opts.windowW ?? 3.4 },
+      uWinH: { value: opts.windowH ?? 3.9 },
+      uWindowLit: { value: new THREE.Color(opts.windowLit ?? '#ffc275') },
+      uGlassDay: { value: new THREE.Color(opts.glassDay ?? '#243449') },
+      uConcrete: { value: new THREE.Color(opts.concrete ?? '#4c5162') },
+      uRoof: { value: new THREE.Color(opts.roof ?? '#2b2f3c') },
+    };
+    return this.style.make({
+      name: 'facade',
+      pars: FACADE_PARS,
+      vertexPars: 'varying vec3 vTint;',
+      vertexHook: `
+        #ifdef USE_INSTANCING_COLOR
+          vTint = instanceColor;
+        #else
+          vTint = vec3(1.0);
+        #endif
+      `,
+      albedo: FACADE_ALBEDO,
+      extra: this.facadeUniforms,
     });
-    // `emissive` must be non-black for three to keep the emissive path alive.
-    mat.emissive.setRGB(0.0008, 0.0008, 0.0008);
-
-    this.atmo.patch(mat, {
-      tag: 'facade',
-      onShader: (shader) => {
-        Object.assign(shader.uniforms, this.uniforms);
-        shader.vertexShader = 'varying vec3 vFacadeNormalW;\n' + shader.vertexShader;
-        shader.vertexShader = shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          '#include <begin_vertex>\n  vFacadeNormalW = normalize( mat3( modelMatrix ) * normal );'
-        );
-        shader.fragmentShader = FACADE_PARS + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader
-          .replace('#include <map_fragment>', FACADE_MAP)
-          .replace('#include <color_fragment>', '')      // folded into FACADE_MAP
-          .replace('#include <roughnessmap_fragment>', FACADE_ROUGH)
-          .replace('#include <emissivemap_fragment>', FACADE_EMISSIVE);
-      },
-    });
-    return mat;
   }
 
   _roadMaterial(opts) {
-    const asphalt = opts.asphaltTexture;
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#4a4a4e'),
-      roughness: 0.92,
-      metalness: 0.0,
-      map: asphalt?.map ?? null,
-      normalMap: asphalt?.normalMap ?? null,
+    return this.style.make({
+      name: 'road',
+      pars: 'uniform vec3 uAsphalt, uPaint;\nuniform float uBlock;',
+      albedo: `
+        float grit = sNoise(vWorld.xz * 1.4) * 0.12;
+        albedo = uAsphalt * (0.9 + grit);
+        // Lane markings, laid on the same grid the blocks were built on.
+        vec2 g = abs(fract(vWorld.xz / uBlock + 0.5) - 0.5);
+        float line = smoothstep(0.492, 0.5, max(g.x, g.y));
+        albedo = mix(albedo, uPaint, line * 0.30);
+        ao = 0.7;
+      `,
+      extra: {
+        uAsphalt: { value: new THREE.Color(opts.asphalt ?? '#20242e') },
+        uPaint: { value: new THREE.Color(opts.paint ?? '#6a6350') },
+        uBlock: { value: opts.block ?? 96 },
+      },
     });
-    if (mat.map) { mat.map = mat.map.clone(); mat.map.needsUpdate = true; mat.map.repeat.set(6, 6); }
-    if (mat.normalMap) { mat.normalMap = mat.normalMap.clone(); mat.normalMap.needsUpdate = true; mat.normalMap.repeat.set(6, 6); }
-    this.atmo.patch(mat, { tag: 'road' });
-    return mat;
   }
 
   _carMaterial() {
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, roughness: 0.35, metalness: 0.4,
+    return this.style.make({
+      name: 'car',
+      pars: 'varying vec3 vTint;',
+      vertexPars: 'varying vec3 vTint;',
+      vertexHook: `
+        #ifdef USE_INSTANCING_COLOR
+          vTint = instanceColor;
+        #else
+          vTint = vec3(0.8);
+        #endif
+      `,
+      albedo: `
+        albedo = vTint * 0.5;
+        // Headlights and tail lights: at dusk this is most of what you see
+        // of the traffic from three hundred metres up.
+        float front = smoothstep(0.2, 0.9, -N.z);
+        float back = smoothstep(0.2, 0.9, N.z);
+        emissive += vec3(1.0, 0.93, 0.78) * front * 1.6;
+        emissive += vec3(1.0, 0.18, 0.10) * back * 0.9;
+      `,
     });
-    this.atmo.patch(mat, { tag: 'car' });
-    return mat;
   }
 
   /* ── tiles ──────────────────────────────────────────────── */
@@ -438,4 +436,4 @@ export class City {
   }
 }
 
-export { clamp, smooth };
+export { clamp };

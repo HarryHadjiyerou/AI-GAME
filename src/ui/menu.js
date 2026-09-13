@@ -17,13 +17,19 @@ import * as THREE from 'three';
 import { Noise, clamp, lerp, smooth } from '../core/noise.js';
 import { BIRDS, BIRD_ORDER } from '../config/birds.js';
 
+/* Keyed to the in-flight palettes rather than to an atlas: the planet is the
+   first thing anyone sees, and if its greens and sands do not belong to the
+   same picture as the worlds behind the TAKE FLIGHT button, nothing that
+   follows looks deliberate. */
 const BIOME_COLOR = {
-  forest:   new THREE.Color('#37552b'),
-  coast:    new THREE.Color('#c7b189'),
-  mountain: new THREE.Color('#e8eef5'),
-  city:     new THREE.Color('#6a6a70'),
+  forest:   new THREE.Color('#2f5138'),
+  coast:    new THREE.Color('#d9bb85'),
+  mountain: new THREE.Color('#6b5f6e'),
+  city:     new THREE.Color('#6d6474'),
 };
-const SEA = new THREE.Color('#17384f');
+const SNOW = new THREE.Color('#efe8f4');
+const SEA_DEEP = new THREE.Color('#0d2f4a');
+const SEA_SHELF = new THREE.Color('#2a93a6');
 
 export class MenuPlanet {
   constructor(canvas) {
@@ -46,19 +52,32 @@ export class MenuPlanet {
     this.camera.position.set(0, 0.6, 6.4);
     this.camera.lookAt(0, 0, 0);
 
-    const key = new THREE.DirectionalLight(0xfff0dc, 3.1);
-    key.position.set(3, 2.2, 3.4);
+    /* One warm sun, high and to the right, and a cold bounce from the far
+       side. The gap between them is the terminator, which is the only thing
+       that makes a sphere read as a planet rather than a ball. */
+    const key = new THREE.DirectionalLight(0xffd9a8, 3.4);
+    key.position.set(3.4, 2.0, 2.6);
     this.scene.add(key);
-    const rim = new THREE.DirectionalLight(0x88b4e8, 1.5);
-    rim.position.set(-4, -0.6, -2);
+    const rim = new THREE.DirectionalLight(0x6f8fd8, 1.1);
+    rim.position.set(-4, -0.8, -1.6);
     this.scene.add(rim);
-    this.scene.add(new THREE.AmbientLight(0x24303f, 1.4));
+    this.scene.add(new THREE.AmbientLight(0x1b2436, 1.2));
+    this.sun = key.position.clone().normalize();
+
+    this.stars = this._stars();
+    this.scene.add(this.stars);
 
     this.planet = this._planet();
     this.scene.add(this.planet);
 
-    this.halo = this._halo();
-    this.scene.add(this.halo);
+    this.clouds = this._clouds();
+    this.scene.add(this.clouds);
+
+    this.halo = this._halo(2.30, 3.6, 1.0);
+    this.glow = this._halo(2.90, 2.1, 0.30);
+    this.scene.add(this.halo, this.glow);
+    for (const h of [this.halo, this.glow]) h.material.uniforms.uSun.value.copy(this.sun);
+    this.clouds.material.uniforms.uSun.value.copy(this.sun);
 
     this.birds = new THREE.Group();
     this.scene.add(this.birds);
@@ -67,6 +86,7 @@ export class MenuPlanet {
     this.selected = 0;
     this.spin = 0;
     this.targetSpin = 0;
+    this._drift = 0;
     this.running = false;
     this.ok = true;
     this._clock = new THREE.Clock();
@@ -114,12 +134,15 @@ export class MenuPlanet {
       if (land) {
         c.copy(BIOME_COLOR[biome]);
         // Snow on the genuinely high ground and at the poles, not everywhere.
-        const snow = smooth(0.52, 0.86, h) * (biome === 'mountain' ? 1 : 0.45)
-                   + smooth(0.80, 0.99, Math.abs(lat) / 1.5708) * 0.9;
-        c.lerp(BIOME_COLOR.mountain, clamp(snow, 0, 1));
+        // Snow on the summits and the caps only. The first pass whited out
+        // the whole mountain quarter, which from this distance made a third
+        // of the planet a featureless sheet.
+        const snow = smooth(0.74, 1.04, h) * (biome === 'mountain' ? 1 : 0.35)
+                   + smooth(0.90, 1.02, Math.abs(lat) / 1.5708) * 0.85;
+        c.lerp(SNOW, clamp(snow, 0, 1));
         c.offsetHSL(0, 0, (n.simplex3(u.x * 9, u.y * 9, u.z * 9)) * 0.05);
       } else {
-        c.copy(SEA).lerp(new THREE.Color('#2f7f96'), clamp(1 + h * 3.4, 0, 1));
+        c.copy(SEA_DEEP).lerp(SEA_SHELF, clamp(1 + h * 3.4, 0, 1));
       }
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
@@ -135,24 +158,131 @@ export class MenuPlanet {
     return mesh;
   }
 
-  /** A thin shell of backside-lit blue, standing in for an atmosphere. */
-  _halo() {
+  /**
+   * The atmosphere.
+   *
+   * A flat blue shell was the giveaway that this was a ball with a glow round
+   * it. Real air scatters by angle: it goes hot and orange where you are
+   * looking through it towards the sun and deep blue on the far limb, and it
+   * is brightest where the line of sight is longest. So the shell is tinted
+   * by the sun angle, and a second, much wider and fainter shell sits outside
+   * it to give the whole thing somewhere to fade out to.
+   */
+  _halo(radius = 2.42, power = 3.4, strength = 0.9) {
     const mat = new THREE.ShaderMaterial({
       transparent: true, side: THREE.BackSide, depthWrite: false,
-      uniforms: { uColor: { value: new THREE.Color('#78b6ff') } },
-      vertexShader: `
-        varying vec3 vN; varying vec3 vP;
-        void main(){ vN = normalize(normalMatrix * normal);
-          vec4 mv = modelViewMatrix * vec4(position,1.0); vP = mv.xyz;
-          gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `
-        uniform vec3 uColor; varying vec3 vN; varying vec3 vP;
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uCool: { value: new THREE.Color('#4f8ff0') },
+        uWarm: { value: new THREE.Color('#ffb877') },
+        uSun: { value: new THREE.Vector3(0.74, 0.44, 0.57) },
+        uPower: { value: power },
+        uStrength: { value: strength },
+      },
+      vertexShader: /* glsl */`
+        varying vec3 vN; varying vec3 vP; varying vec3 vW;
         void main(){
-          float f = pow(clamp(1.0 - abs(dot(normalize(vN), normalize(-vP))), 0.0, 1.0), 3.4);
-          gl_FragColor = vec4(uColor, f * 0.85);
+          vN = normalize(normalMatrix * normal);
+          vW = normalize(mat3(modelMatrix) * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0); vP = mv.xyz;
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        uniform vec3 uCool, uWarm, uSun;
+        uniform float uPower, uStrength;
+        varying vec3 vN; varying vec3 vP; varying vec3 vW;
+        void main(){
+          float limb = pow(clamp(1.0 - abs(dot(normalize(vN), normalize(-vP))), 0.0, 1.0), uPower);
+          float lit = clamp(dot(normalize(vW), normalize(uSun)) * 0.5 + 0.5, 0.0, 1.0);
+          vec3 col = mix(uCool, uWarm, pow(lit, 2.2));
+          // The night side keeps a thread of air rather than vanishing.
+          gl_FragColor = vec4(col, limb * uStrength * (0.22 + lit * 0.95));
         }`,
     });
-    return new THREE.Mesh(new THREE.SphereGeometry(2.42, 48, 32), mat);
+    return new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 32), mat);
+  }
+
+  /** A thin, slowly counter-turning shell of cloud. */
+  _clouds() {
+    const n = new Noise(4211);
+    const geo = new THREE.IcosahedronGeometry(2.075, 40);
+    const pos = geo.attributes.position;
+    const alpha = new Float32Array(pos.count);
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).normalize();
+      // Banded fBm: weather on a planet organises into latitudes.
+      let f = n.simplex3(v.x * 2.4, v.y * 4.6, v.z * 2.4) * 0.6
+            + n.simplex3(v.x * 5.3, v.y * 9.1, v.z * 5.3) * 0.28
+            + n.simplex3(v.x * 11.0, v.y * 17.0, v.z * 11.0) * 0.12;
+      // Broken cloud, not overcast: the point of the planet is that you can
+      // see four biomes on it, and weather that hides them defeats it.
+      alpha[i] = clamp((f - 0.30) * 1.7, 0, 1);
+    }
+    geo.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, side: THREE.FrontSide,
+      uniforms: { uSun: { value: new THREE.Vector3(0.74, 0.44, 0.57) } },
+      vertexShader: /* glsl */`
+        attribute float alpha;
+        varying float vA; varying vec3 vW;
+        void main(){
+          vA = alpha;
+          vW = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */`
+        uniform vec3 uSun; varying float vA; varying vec3 vW;
+        void main(){
+          if (vA <= 0.01) discard;
+          float lit = clamp(dot(normalize(vW), normalize(uSun)), 0.0, 1.0);
+          vec3 col = mix(vec3(0.24, 0.29, 0.42), vec3(1.0, 0.95, 0.88), pow(lit, 0.7));
+          gl_FragColor = vec4(col, vA * (0.30 + lit * 0.62));
+        }`,
+    });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  /** Stars, so the planet has something to hang in. */
+  _stars() {
+    const N = 420;
+    const pos = new Float32Array(N * 3);
+    const size = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      // Rejection-free spherical sampling, pushed out beyond the planet.
+      const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(1 - u * u), R = 26 + Math.random() * 8;
+      pos[i * 3] = Math.cos(th) * r * R;
+      pos[i * 3 + 1] = u * R;
+      pos[i * 3 + 2] = Math.sin(th) * r * R;
+      size[i] = 0.6 + Math.pow(Math.random(), 3) * 2.6;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(size, 1));
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: /* glsl */`
+        attribute float size; varying float vTw;
+        uniform float uTime;
+        void main(){
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vTw = 0.65 + 0.35 * sin(uTime * 1.6 + position.x * 3.1 + position.y * 1.7);
+          // Clamped: without it the handful of stars nearest the camera blow
+          // up into soft white discs the size of moons.
+          gl_PointSize = clamp(size * (86.0 / -mv.z), 0.8, 3.4);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: /* glsl */`
+        varying float vTw;
+        void main(){
+          float d = length(gl_PointCoord - 0.5);
+          float a = smoothstep(0.5, 0.06, d);
+          gl_FragColor = vec4(vec3(0.86, 0.91, 1.0), a * vTw);
+        }`,
+    });
+    return new THREE.Points(geo, mat);
   }
 
   /** Drop in whichever GLB birds loaded; the planet works without them. */
@@ -161,11 +291,20 @@ export class MenuPlanet {
     for (const m of models) {
       if (!m?.scene) { i++; continue; }
       const obj = m.scene.clone(true);
+      /* The three.js sample birds are a flamingo, a parrot and a stork: hot
+         pink, primary red and white. Against this palette they read as three
+         mistakes orbiting a planet. They are only here for the silhouette and
+         the wingbeat, so they get taken down to near-silhouette — dark, warm
+         and desaturated — and the eye takes them for birds. */
+      const tone = new THREE.Color('#2a2331');
       obj.traverse((o) => {
         if (!o.isMesh) return;
         o.material = o.material.clone();
-        o.material.roughness = 0.8;
+        o.material.roughness = 0.85;
         o.material.metalness = 0;
+        o.material.color?.lerp(tone, 0.9);
+        if (o.material.emissive) o.material.emissive.setHex(0x000000);
+        o.material.map = null;
         o.frustumCulled = false;
       });
       obj.scale.setScalar(0.0042);
@@ -195,8 +334,11 @@ export class MenuPlanet {
     const w = Math.max(1, r.width | 0), h = Math.max(1, r.height | 0);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // Pull back on narrow screens so the planet never gets cropped.
-    this.camera.position.z = lerp(7.4, 6.0, clamp((w / h - 0.5) / 1.4, 0, 1));
+    /* Far enough back that the outer glow shell clears the top and bottom of
+       the canvas. Closer than this and the atmosphere gets sliced off square,
+       which reads as a rendering fault rather than as a crop. */
+    const fit = 2.98 / Math.tan((this.camera.fov * Math.PI) / 360);
+    this.camera.position.z = fit * lerp(1.12, 1.0, clamp((w / h - 0.5) / 1.4, 0, 1));
     this.camera.updateProjectionMatrix();
   }
 
@@ -223,6 +365,14 @@ export class MenuPlanet {
     this.spin = lerp(this.spin, this.targetSpin, 1 - Math.exp(-dt / 0.45));
     this.planet.rotation.y = this.spin + performance.now() * 0.000022;
     this.halo.rotation.y = this.planet.rotation.y;
+    // The weather turns a little faster than the ground under it, which is
+    // the cheapest way to make a small sphere feel like it has an atmosphere
+    // rather than a painted-on texture.
+    this._drift += dt * 0.013;
+    this.clouds.rotation.copy(this.planet.rotation);
+    this.clouds.rotation.y += this._drift;
+    this.stars.rotation.y -= dt * 0.004;
+    this.stars.material.uniforms.uTime.value += dt;
 
     for (let i = 0; i < this.birds.children.length; i++) {
       const o = this.birds.children[i];

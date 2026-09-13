@@ -1,67 +1,34 @@
 /* ═══════════════════════════════════════════════════════════
-   Asset streaming.
+   Assets.
 
-   Everything here is fetched live from a third-party CDN that
-   serves `Access-Control-Allow-Origin: *`, so nothing has to be
-   redistributed with the game:
+   Almost nothing is fetched. The look is generated: skies, terrain,
+   water, vegetation, cloud, weather and the first-person wings are
+   all built at runtime from noise and a palette (see core/style.js
+   and world/palette.js), so the whole game is a few hundred kilobytes
+   of source with no texture payload behind it.
 
-     • Poly Haven  (CC0)   — HDRI skies + PBR texture sets
+   That was not the original plan. The first version streamed 1k HDRI
+   skies and ten PBR texture sets per world from Poly Haven — about
+   eight megabytes a world — and the result was a photograph of a
+   forest floor stretched over hand-built terrain under a photograph
+   of somebody else's sky. It never resolved into one picture, and it
+   cost the first ten seconds of every session. The stylised renderer
+   replaced it outright, and the streaming code came out with it.
+
+   What is left is the three.js sample birds, loaded from a CDN that
+   serves `Access-Control-Allow-Origin: *`:
+
      • three.js repo (CC-BY on the models) — GLB birds
 
-   Every remote load has a procedural fallback. If the network is
-   gone, or the player turns streaming off, the game still flies —
-   it just looks hand-painted rather than photographed.
+   They are optional. If the network is gone the flocks and the menu
+   simply have no birds in them, and everything else is unaffected.
    ═══════════════════════════════════════════════════════════ */
 
 import * as THREE from 'three';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Noise, clamp, lerp } from './noise.js';
 
-const PH_TEX  = 'https://dl.polyhaven.org/file/ph-assets/Textures/jpg';
-const PH_HDRI = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr';
 const THREE_MODELS = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/models/gltf';
-
-/**
- * All four are `_puresky` variants — sky and clouds only, no ground.
- *
- * That is not a stylistic preference. The world curves away to a horizon a
- * few kilometres out, and whatever the environment map contains below that
- * line is what the player sees beyond the edge of the world. A full-scene
- * HDRI puts a photograph of somebody's beach down there, complete with
- * buildings, and the illusion collapses immediately.
- */
-export const HDRI = {
-  forest:   'kloofendal_28d_misty_puresky',
-  coast:    'qwantani_sunrise_puresky',
-  mountain: 'drakensberg_solitary_mountain_puresky',
-  city:     'kloofendal_38d_partly_cloudy_puresky',
-};
-
-/** Poly Haven slugs, grouped by the surface they stand in for. */
-export const TEX = {
-  forestFloor: 'forest_ground_04',
-  grassRock:   'aerial_grass_rock',
-  rock:        'rock_face_03',
-  rocksGround: 'rocks_ground_02',
-  snow:        'snow_02',
-  sand:        'coast_sand_01',
-  bark:        'bark_willow_02',
-  mudLeaves:   'brown_mud_leaves_01',
-  asphalt:     'asphalt_02',
-  concrete:    'concrete_wall_008',
-};
-
-/**
- * Poly Haven names the albedo map `_diff_` on newer assets and `_col_` on
- * older ones, with nothing in the slug to tell you which. These are the ones
- * that differ; anything not listed is tried as `_diff_` first and falls back
- * to `_col_`, so an unlisted old asset still works — it just costs a 404 on
- * the way.
- */
-const ALBEDO_NAME = {
-  rocks_ground_02: 'col',
-};
 
 export const BIRD_GLB = {
   stork:    `${THREE_MODELS}/Stork.glb`,
@@ -285,112 +252,6 @@ export class Assets {
 
   /** Declare how many loads this batch contains, so the bar is honest. */
   expect(n) { this._total = n; this._done = 0; return this; }
-
-  /* ── HDRI environment ───────────────────────────────────── */
-
-  async environment(slug, { res = '1k' } = {}) {
-    const key = `env:${slug}`;
-    if (this.cache.has(key)) return this.cache.get(key);
-
-    let envTex = null;
-    if (this.stream) {
-      try {
-        const hdr = await new RGBELoader()
-          .setDataType(THREE.HalfFloatType)
-          .loadAsync(`${PH_HDRI}/${res}/${slug}_${res}.hdr`);
-        hdr.mapping = THREE.EquirectangularReflectionMapping;
-        envTex = { env: this.pmrem.fromEquirectangular(hdr).texture, background: hdr };
-      } catch (e) {
-        this.failures.push(`HDRI ${slug}`);
-      }
-    }
-    if (!envTex) envTex = this._fallbackEnvironment();
-    this.cache.set(key, envTex);
-    this._tick(`sky · ${slug.replace(/_/g, ' ')}`);
-    return envTex;
-  }
-
-  /** Gradient sky baked to an equirect texture, used when the HDRI is unavailable. */
-  _fallbackEnvironment(top = '#7fb3e8', horizon = '#dfe8ee', ground = '#3b3a34') {
-    const [cv, g] = canvas(512);
-    const grad = g.createLinearGradient(0, 0, 0, 512);
-    grad.addColorStop(0.00, top);
-    grad.addColorStop(0.46, horizon);
-    grad.addColorStop(0.52, ground);
-    grad.addColorStop(1.00, '#1a1a16');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 512, 512);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return { env: this.pmrem.fromEquirectangular(tex).texture, background: tex };
-  }
-
-  /* ── PBR texture sets ───────────────────────────────────── */
-
-  /**
-   * Returns { map, normalMap, aoRoughMetalMap } — Poly Haven's `arm` packing
-   * is exactly three.js's (R=AO, G=roughness, B=metalness), so one file feeds
-   * aoMap, roughnessMap and metalnessMap at once.
-   */
-  async surface(slug, { repeat = 1, res = '1k', fallback = ['#5b6b46', '#8f9a72'] } = {}) {
-    const key = `tex:${slug}:${repeat}`;
-    if (this.cache.has(key)) return this.cache.get(key);
-
-    let set = null;
-    if (this.stream) {
-      try {
-        const base = `${PH_TEX}/${res}/${slug}/${slug}`;
-        const first = ALBEDO_NAME[slug] ?? 'diff';
-        const second = first === 'diff' ? 'col' : 'diff';
-        const [map, normalMap, arm] = await Promise.all([
-          this._texAny([`${base}_${first}_${res}.jpg`, `${base}_${second}_${res}.jpg`], true),
-          this._tex(`${base}_nor_gl_${res}.jpg`, false),
-          this._tex(`${base}_arm_${res}.jpg`, false),
-        ]);
-        set = { map, normalMap, armMap: arm, procedural: false };
-      } catch (e) {
-        this.failures.push(`texture ${slug}`);
-      }
-    }
-    if (!set) {
-      const seed = [...slug].reduce((a, c) => a + c.charCodeAt(0), 0);
-      set = {
-        map: toTexture(proceduralSurface(256, fallback[0], fallback[1], seed), { srgb: true }),
-        normalMap: null, armMap: null, procedural: true,
-      };
-    }
-
-    for (const t of [set.map, set.normalMap, set.armMap]) {
-      if (!t) continue;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.repeat.set(repeat, repeat);
-      t.anisotropy = this.maxAniso;
-    }
-    this.cache.set(key, set);
-    this._tick(`surface · ${slug.replace(/_/g, ' ')}`);
-    return set;
-  }
-
-  /** First URL that loads wins; rejects only if none of them do. */
-  async _texAny(urls, srgb) {
-    let last = null;
-    for (const u of urls) {
-      try { return await this._tex(u, srgb); } catch (e) { last = e; }
-    }
-    throw last ?? new Error('no candidate urls');
-  }
-
-  _tex(url, srgb) {
-    return new Promise((res, rej) => {
-      new THREE.TextureLoader().setCrossOrigin('anonymous').load(
-        url,
-        (t) => { t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; res(t); },
-        undefined,
-        () => rej(new Error(`failed ${url}`))
-      );
-    });
-  }
 
   /* ── GLB birds ──────────────────────────────────────────── */
 

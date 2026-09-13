@@ -71,10 +71,17 @@
     <h3>Settings</h3>
 
     <label class="row">
+      <span>Flight assistance</span>
+      <select id="s-assist"></select>
+      <em class="row-note" id="s-assist-note"></em>
+    </label>
+
+    <label class="row">
       <span>Graphics</span>
       <select id="s-quality">
+        <option value="auto" selected>Auto — match the device</option>
         <option value="low">Low — long battery</option>
-        <option value="medium" selected>Medium</option>
+        <option value="medium">Medium</option>
         <option value="high">High</option>
         <option value="ultra">Ultra — desktop GPU</option>
       </select>
@@ -96,14 +103,15 @@
     </label>
 
     <label class="row">
-      <span>Tilt sensitivity <em id="s-tilt-v">1.00</em></span>
-      <input id="s-tilt" type="range" min="0.3" max="2.5" step="0.05" value="1" />
+      <span>Stick sensitivity <em id="s-sens-v">1.00</em></span>
+      <input id="s-sens" type="range" min="0.3" max="2.5" step="0.05" value="1" />
     </label>
 
-    <label class="row checkbox"><input id="s-invert" type="checkbox" /><span>Invert pitch (tilt forward = climb)</span></label>
+    <label class="row checkbox"><input id="s-tilt" type="checkbox" /><span>Tilt the phone to fly <em>instead of the left stick</em></span></label>
+    <label class="row checkbox"><input id="s-invert" type="checkbox" /><span>Invert pitch</span></label>
     <label class="row checkbox"><input id="s-wings" type="checkbox" checked /><span>Show wings in peripheral vision</span></label>
     <label class="row checkbox"><input id="s-hud" type="checkbox" checked /><span>Show HUD</span></label>
-    <label class="row checkbox"><input id="s-assets" type="checkbox" checked /><span>Stream photoreal assets (HDRI + PBR, ~8&nbsp;MB)</span></label>
+    <label class="row checkbox"><input id="s-assets" type="checkbox" checked /><span>Load bird models from CDN (~300&nbsp;KB, for distant flocks)</span></label>
 
     <button class="primary wide" data-close="settings">Done</button>
   </div>
@@ -115,32 +123,34 @@
     <h3>Controls</h3>
 
     <div class="ctrl-block">
-      <h4>Phone — tilt</h4>
+      <h4>Phone</h4>
       <ul>
-        <li><b>Tilt left / right</b> — bank and turn</li>
-        <li><b>Tilt forward</b> — dive · <b>tilt back</b> — climb</li>
-        <li><b>Tap</b> anywhere — flap</li>
-        <li><b>Hold</b> — tuck wings (dive)</li>
-        <li><b>Two-finger tap</b> — re-centre the tilt neutral point</li>
+        <li><b>Left stick</b> — steer. Push to bank, pull back to raise the nose.</li>
+        <li><b>Right stick</b> — look around without changing course</li>
+        <li><b>FLAP</b> — a wingbeat. Hold for several.</li>
+        <li><b>DIVE</b> — fold the wings and drop</li>
       </ul>
-      <p class="note">iOS asks permission for motion sensors — the prompt appears when you take flight.</p>
-    </div>
-
-    <div class="ctrl-block">
-      <h4>Touch — drag fallback</h4>
-      <ul>
-        <li><b>Drag</b> — steer (used automatically when no tilt sensor)</li>
-        <li><b>Tap</b> — flap · <b>hold</b> — tuck</li>
-      </ul>
+      <p class="note">Both sticks are floating — they appear wherever your thumb lands, so you never have to look for them.</p>
     </div>
 
     <div class="ctrl-block">
       <h4>Desktop</h4>
       <ul>
         <li><b>A / D</b> or <b>← →</b> — bank</li>
-        <li><b>W / S</b> or <b>↑ ↓</b> — dive / climb</li>
-        <li><b>Space</b> — flap · <b>Shift</b> — tuck · <b>Mouse drag</b> — look</li>
-        <li><b>Esc</b> — menu · <b>P</b> — photo mode · <b>F</b> — perf readout</li>
+        <li><b>W / S</b> or <b>↑ ↓</b> — nose down / nose up</li>
+        <li><b>Space</b> — flap · <b>Shift</b> — dive · <b>Mouse drag</b> — look</li>
+        <li><b>Esc</b> — menu · <b>P</b> — hide interface · <b>F</b> — performance</li>
+      </ul>
+      <p class="note">A game controller works too: left stick steers, right stick looks, A or right trigger beats.</p>
+    </div>
+
+    <div class="ctrl-block">
+      <h4>How to actually fly</h4>
+      <ul>
+        <li>Let go of the stick and the bird settles into a glide. It will not dive at the ground on its own.</li>
+        <li><b>Banking is how you turn.</b> Lean the stick over and the turn happens by itself.</li>
+        <li>Height is speed and speed is height. Dive to go fast, pull up to trade it back.</li>
+        <li>Rising air is marked by spiralling motes. Circle inside one and you go up without beating.</li>
       </ul>
     </div>
 
@@ -152,28 +162,16 @@
 <div id="credits" class="overlay sheet hidden">
   <div class="sheet-inner">
     <h3>Assets &amp; credits</h3>
-    <p class="note">Every third-party asset below is streamed live from its own CDN and is CC0 or otherwise free to use. Nothing here is redistributed.</p>
+    <p class="note">Almost nothing here is downloaded. The sky, the ground, the sea, the weather and the wings are generated as the game runs. Two things are fetched, both free to use, neither redistributed.</p>
     <dl class="credit-list">
-      <dt>Poly Haven <span>CC0</span></dt>
-      <dd>HDRI skies and PBR ground / rock / snow / sand / bark / asphalt textures. polyhaven.com</dd>
-      <dt>three.js example models <span>CC-BY</span></dt>
-      <dd>Flamingo, Parrot and Stork GLB models with morph-target flight animation, used for the menu birds and the distant flocks. github.com/mrdoob/three.js</dd>
       <dt>three.js <span>MIT</span></dt>
-      <dd>Renderer, loaders and post-processing stack.</dd>
-      <dt>Procedural, built in-engine</dt>
-      <dd>Terrain, rivers, coastline, city, vegetation, cloudscape, water surface, first-person wings and all flight physics.</dd>
+      <dd>Renderer, loaders and post-processing stack. threejs.org</dd>
+      <dt>three.js example models <span>CC-BY</span></dt>
+      <dd>Flamingo, Parrot and Stork GLB models with morph-target flight animation — the birds circling the planet and the distant flocks. Around 300&nbsp;KB, and optional. github.com/mrdoob/three.js</dd>
+      <dt>Generated in-engine</dt>
+      <dd>Terrain, rivers, coastline, city, vegetation, cloudscape, water, sky and its lighting, weather, thermals, the first-person wings and every line of the flight model.</dd>
     </dl>
     <button class="primary wide" data-close="credits">Done</button>
-  </div>
-</div>
-
-<!-- ══════════════ MOTION PERMISSION ══════════════ -->
-<div id="motion-gate" class="overlay sheet hidden">
-  <div class="sheet-inner narrow">
-    <h3>Tilt to fly</h3>
-    <p>AVES flies by tilting the phone itself. iOS needs your permission before a web page can read the motion sensors.</p>
-    <button class="primary wide" id="motion-allow">Enable tilt controls</button>
-    <button class="ghost wide" id="motion-skip">Use drag controls instead</button>
   </div>
 </div>
 
@@ -182,6 +180,7 @@
   <div class="hud-corner tl">
     <div class="hud-bird" id="h-bird">HAWK</div>
     <div class="hud-world" id="h-world">THE FOREST</div>
+    <div class="hud-weather" id="h-weather">FAIR</div>
   </div>
 
   <div class="hud-corner tr">
@@ -197,12 +196,21 @@
 
   <div class="hud-corner br">
     <div class="hud-state" id="h-state">GLIDE</div>
-    <div class="hud-thermal hidden" id="h-thermal">THERMAL</div>
+    <div class="hud-thermal hidden" id="h-thermal">RISING AIR</div>
+  </div>
+
+  <!-- Where the nearest lift is. The motes show it in the world; this is
+       for when it is behind you. -->
+  <div class="lift-cue hidden" id="h-lift">
+    <svg viewBox="0 0 24 24" width="15" height="15" id="h-lift-arrow">
+      <path d="M12 3l6 10h-4v8h-4v-8H6z" fill="currentColor"/>
+    </svg>
+    <span id="h-lift-dist">—</span>
   </div>
 
   <div class="horizon-wrap"><div class="horizon" id="h-horizon"></div></div>
   <div id="h-toast" class="toast"></div>
-  <div id="h-stall" class="stall-warn hidden">STALL</div>
+  <div id="h-warn" class="flight-warn hidden"><span id="h-warn-text">PULL UP</span></div>
   <button id="h-menu" class="hud-btn">☰</button>
   <div id="perf" class="perf hidden"></div>
 </div>

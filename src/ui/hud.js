@@ -16,6 +16,7 @@ const STATE_LABEL = {
   [FLIGHT_STATE.SOAR]: 'SOAR',
   [FLIGHT_STATE.STALL]: 'STALL',
   [FLIGHT_STATE.WATER]: 'SUBMERGED',
+  [FLIGHT_STATE.FLOAT]: 'AFLOAT',
   [FLIGHT_STATE.RECOVER]: 'RECOVER',
 };
 
@@ -27,7 +28,10 @@ export class Hud {
       bird: $('h-bird'), world: $('h-world'),
       alt: $('h-alt'), spd: $('h-spd'), vario: $('h-var'),
       stam: $('h-stam'), state: $('h-state'), thermal: $('h-thermal'),
-      horizon: $('h-horizon'), toast: $('h-toast'), stall: $('h-stall'),
+      horizon: $('h-horizon'), toast: $('h-toast'),
+      warn: $('h-warn'), warnText: $('h-warn-text'),
+      weather: $('h-weather'),
+      lift: $('h-lift'), liftArrow: $('h-lift-arrow'), liftDist: $('h-lift-dist'),
       perf: $('perf'),
     };
     this._acc = 0;
@@ -88,8 +92,33 @@ export class Hud {
     this.el.stam.style.background = stam < 0.22 ? '#e2604a' : 'var(--accent)';
 
     set(this.el.state, 'state', STATE_LABEL[f.state] ?? f.state);
+    set(this.el.weather, 'weather', extra.weather ?? '');
     this.el.thermal.classList.toggle('hidden', f.inThermal < 0.45);
-    this.el.stall.classList.toggle('hidden', f.state !== FLIGHT_STATE.STALL);
+
+    // Point at the nearest column of rising air. The motes already show it in
+    // the world; this is for the times it is behind you.
+    const lift = extra.lift;
+    const show = !!lift && lift.distance > 60 && lift.distance < 1400 && f.inThermal < 0.4;
+    this.el.lift.classList.toggle('hidden', !show);
+    if (show) {
+      // Bearing relative to where the bird is pointing, so the arrow means
+      // "turn this way" rather than "north is over there".
+      const bearing = Math.atan2(lift.x - f.position.x, lift.z - f.position.z);
+      const rel = bearing - (Math.PI - (extra.heading ?? 0));
+      this.el.liftArrow.style.transform = `rotate(${(rel * 57.2958).toFixed(0)}deg)`;
+      set(this.el.liftDist, 'liftd', `${Math.round(lift.distance)} m`);
+    }
+
+    // One warning slot, because two competing alarms is how you get neither
+    // of them read.
+    const warn = extra.warning === 'ground' ? 'PULL UP'
+               : extra.warning === 'stall' ? 'TOO SLOW'
+               : null;
+    if (warn !== this._warn) {
+      this._warn = warn;
+      this.el.warn.classList.toggle('hidden', !warn);
+      if (warn) this.el.warnText.textContent = warn;
+    }
   }
 
   perf(text) {

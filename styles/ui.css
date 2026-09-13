@@ -235,3 +235,95 @@ input[type=range]{height:20px;background:transparent}
   .detail-blurb{display:none}
   .wordmark.small{font-size:20px}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Touch controls
+   Floating sticks — they appear where the thumb lands, so there is
+   never anything to look for and nothing occupying the view when the
+   player is only watching.
+   ═══════════════════════════════════════════════════════════ */
+
+.touch-layer{position:fixed;inset:0;z-index:14;pointer-events:auto;touch-action:none}
+
+.stick{position:absolute;width:0;height:0;pointer-events:none}
+.stick-base{
+  position:absolute;left:50%;top:50%;width:124px;height:124px;margin:-62px 0 0 -62px;
+  border-radius:50%;border:1.5px solid rgba(255,255,255,.20);
+  background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.05),rgba(255,255,255,.01) 70%);
+  backdrop-filter:blur(1px);-webkit-backdrop-filter:blur(1px);
+}
+.stick-knob{
+  position:absolute;left:50%;top:50%;width:54px;height:54px;
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(circle at 42% 36%,rgba(255,255,255,.60),rgba(255,255,255,.20) 65%,rgba(255,255,255,.08));
+  border:1px solid rgba(255,255,255,.34);
+  box-shadow:0 2px 14px rgba(0,0,0,.35);
+}
+.stick-label{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,54px);
+  font-size:7.5px;letter-spacing:.28em;color:rgba(255,255,255,.34);white-space:nowrap;
+}
+.stick.on .stick-base{border-color:rgba(255,255,255,.32)}
+
+.touch-pad{
+  position:absolute;right:calc(env(safe-area-inset-right) + 16px);
+  bottom:calc(env(safe-area-inset-bottom) + 104px);
+  display:flex;flex-direction:column;gap:12px;pointer-events:auto;
+}
+.touch-btn{
+  width:72px;height:72px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.20);
+  color:rgba(255,255,255,.82);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  transition:background .1s,transform .08s,border-color .1s;
+  touch-action:none;
+}
+.touch-btn .touch-label{font-size:8px;letter-spacing:.2em;font-weight:600}
+.touch-btn .touch-hint{font-size:6.5px;letter-spacing:.16em;opacity:.45}
+.touch-btn.on{background:rgba(255,255,255,.20);border-color:rgba(255,255,255,.48);transform:scale(.94)}
+.touch-flap.on{background:var(--accent-soft);border-color:rgba(232,176,106,.7);color:var(--accent)}
+
+@media (max-height:480px){
+  .touch-pad{bottom:calc(env(safe-area-inset-bottom) + 14px)}
+  .touch-btn{width:62px;height:62px}
+}
+
+/* ── in-flight warning ──────────────────────────────────── */
+.flight-warn{
+  position:absolute;left:50%;top:34%;transform:translateX(-50%);
+  padding:5px 16px;
+  font-size:11px;letter-spacing:.4em;color:#ffd9a0;
+  border:1px solid rgba(255,180,90,.45);
+  background:rgba(60,25,0,.30);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  animation:warnPulse .9s ease-in-out infinite;
+  white-space:nowrap;
+}
+@keyframes warnPulse{0%,100%{opacity:.5}50%{opacity:1}}
+
+.row-note{
+  display:block;float:none !important;margin-top:5px;
+  font-size:10px;letter-spacing:.04em;color:var(--ink-faint) !important;line-height:1.5;
+}
+.row.checkbox span em{font-style:normal;color:var(--ink-faint);font-size:10px}
+
+.hud-weather{
+  margin-top:5px;font-size:7.5px;letter-spacing:.3em;
+  color:rgba(255,255,255,.42);text-shadow:0 1px 8px #000;
+}
+
+/* Nearest rising air. Shown only when it is out of sight. */
+.lift-cue{
+  position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 74px);
+  transform:translateX(-50%);
+  display:flex;align-items:center;gap:7px;
+  padding:4px 11px;
+  font-size:9px;letter-spacing:.22em;
+  color:#bfe8c8;
+  border:1px solid rgba(150,220,170,.28);
+  background:rgba(20,45,30,.28);
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  text-shadow:0 1px 8px #000;
+}
+.lift-cue svg{transition:transform .25s ease-out}

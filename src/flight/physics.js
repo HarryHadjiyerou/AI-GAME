@@ -50,6 +50,7 @@ export const FLIGHT_STATE = {
   SOAR: 'SOAR',
   STALL: 'STALL',
   WATER: 'WATER',
+  FLOAT: 'FLOAT',
   RECOVER: 'RECOVER',
 };
 
@@ -88,6 +89,9 @@ export class Flight {
     this._aEff = 0;           // the angle of attack the air actually sees
     this.recoverTimer = 0;
     this.groundClearance = 0;
+    this.surfaceClearance = 0;   // height above terrain *or* water, whichever is nearer
+    this.overWater = false;
+    this._depth = 0;         // metres beneath the surface, 0 when flying
     this.distance = 0;
     this.time = 0;
 
@@ -212,22 +216,34 @@ export class Flight {
     // it. A rate command would send any sustained input straight to the stops,
     // which is wrong for a stick and disastrous for a tilted phone — half a
     // tilt has to mean half a bank.
-    const wantBank = input.roll * cfg.maxBank;
+    const wantBank = clamp(input.roll ?? 0, -1, 1) * cfg.maxBank;
     let p = clamp((wantBank - this.bank) * (cfg.rollServo ?? 3.2),
                   -cfg.rollRate, cfg.rollRate) * clamp(speedFactor, 0.12, 1.5);
-    // Left alone, the wings come back level on their own.
-    p += -this.bank * (1 / (cfg.rollCentre ?? 2.4)) * (1 - Math.min(1, Math.abs(input.roll)));
+    // Left alone, the wings come back level on their own. How eagerly is the
+    // assist layer's call: a slow spiral you did not notice starting is one of
+    // the two ways this game used to fly itself into a hillside.
+    const levelling = (input.autoLevel ?? 0.25) * 2.4;
+    p += -this.bank * levelling * (1 - Math.min(1, Math.abs(input.roll ?? 0)));
 
-    // Pitch input commands an angle of attack, not an attitude. A servo then
+    // Pitch commands an angle of attack, not an attitude. A servo then
     // rotates the body until the wing actually sees it. This is why pulling
     // back trades speed for height automatically, and why over-pulling stalls.
-    this.alphaCmd += input.pitch * cfg.alphaRate * dt;
-    // Folding the wings also drops the trim: a tucked bird rides at a low
-    // angle of attack, which is what lets a stoop keep going down instead of
+    //
+    // The mapping is proportional rather than integrating: stick position is
+    // an angle of attack, not a rate of change of one. An integrator drifts,
+    // needs a centring term to stop it drifting, and then fights anything
+    // trying to hold a steady climb — all of which makes it nearly impossible
+    // for the assist layer above to control. Proportional is both easier to
+    // fly by hand and a sane plant for a controller to drive.
+    //
+    // Folding the wings drops the trim: a tucked bird rides at a low angle of
+    // attack, which is what lets a stoop keep going down instead of
     // ballooning back out of it.
     const trim = cfg.trimAlpha + this.tuck * (cfg.tuckAlphaBias ?? -0.11);
-    this.alphaCmd = damp(this.alphaCmd, trim, cfg.alphaCentre ?? 1.6,
-                         dt * (1 - Math.min(1, Math.abs(input.pitch))));
+    const p01 = clamp(input.pitch ?? 0, -1, 1);
+    const span = p01 >= 0 ? (cfg.alphaMax - trim) : (trim - cfg.alphaMin);
+    const wantedAlpha = trim + p01 * span;
+    this.alphaCmd = damp(this.alphaCmd, wantedAlpha, cfg.alphaLag ?? 0.16, dt);
     this.alphaCmd = clamp(this.alphaCmd, cfg.alphaMin, cfg.alphaMax);
     this.alpha = this.alphaCmd;
 
@@ -262,7 +278,12 @@ export class Flight {
     /* ── flapping ────────────────────────────────────────── */
 
     let flapForce = 0;
-    const wantFlap = input.flap && this.stamina > 0.02 && this.tuck < 0.6 && !this.underwater;
+    // Flapping works on the surface as well as in the air — a bird that
+    // settles on the water and cannot take off again is stranded, and a soft
+    // landing on the sea should be a pause, not an ending.
+    const atSurface = this.underwater && this._depth < 1.6;
+    const wantFlap = input.flap && this.stamina > 0.02 && this.tuck < 0.6
+                  && (!this.underwater || atSurface);
     this.flapping = wantFlap;
     if (wantFlap) {
       this.flapPhase += dt / cfg.flapPeriod;
@@ -277,6 +298,10 @@ export class Flight {
       // moving through it, so thrust falls away as speed builds.
       const bite = clamp(1 - V / (cfg.flapSpeedLimit ?? cfg.cruiseSpeed * 3.0), 0.06, 1);
       flapForce = cfg.flapPower * stroke * (0.55 + 0.45 * this.stamina) * bite;
+      // Beating off water is explosive: a gull leaving a lake throws itself
+      // forward with everything it has. Anything gentler and it plateaus
+      // below flying speed and never gets off.
+      if (atSurface) flapForce *= 3.8;
       this.stamina = clamp(this.stamina - cfg.flapCost * dt, 0, 1);
     } else {
       this.flapPhase = this.flapPhase > 0 ? (this.flapPhase + dt / cfg.flapPeriod) % 1 : 0;
@@ -369,6 +394,7 @@ export class Flight {
     const w = this.world;
     if (w.waterLevel === undefined) { this.underwater = false; return; }
     const below = w.waterLevel - this.position.y;
+    this._depth = Math.max(0, below);
     if (below <= 0) {
       if (this.underwater) { this.events.push('surface'); this.underwater = false; }
       return;
@@ -377,13 +403,32 @@ export class Flight {
       this.underwater = true;
       this.events.push(this.airspeed > 12 ? 'splash-hard' : 'splash');
     }
-    // Water: heavy drag, buoyancy that grows with depth, and a shove back
-    // towards the surface. Enough to make a dive-bomb read; not a swim sim.
+    this._depth = below;
+    // Water: drag that scales with how much of the bird is actually in it,
+    // buoyancy that grows with depth, and a shove back towards the surface.
+    // Enough to make a dive-bomb read; not a swim sim.
+    //
+    // The depth scaling matters more than it looks: at full drag a bird
+    // sitting on the surface can never build the speed to fly again, because
+    // every bit of thrust is eaten before it becomes motion. Half-submerged
+    // and planing, it can — which is how a gull actually gets off a lake.
     const depth = below;
-    const drag = clamp(this.airspeed * 0.42, 0, 22);
+    // Only the submerged part drags. A bird sitting on the surface is mostly
+    // in the air, and at full drag it could never build the speed to fly
+    // again — every bit of thrust eaten before it became motion.
+    const submersion = clamp((depth - 0.25) / 0.85, 0.03, 1);
+    const drag = clamp(this.airspeed * 0.42, 0, 22) * submersion;
     this.velocity.multiplyScalar(Math.max(0, 1 - drag * dt));
     this.velocity.y += (6.5 + clamp(depth, 0, 6) * 3.4) * dt;
-    this.stamina = clamp(this.stamina - 0.22 * dt, 0, 1);
+    // Being underwater is exhausting; floating is not. Draining stamina while
+    // a bird rests on the sea is what left it too tired to ever take off.
+    // Underwater is exhausting. Sitting on the surface is the opposite: a
+    // bird that puts down on the sea should be able to rest there and then go
+    // again, which turns a forced landing into a pause instead of an ending.
+    const resting = submersion < 0.36 && this.airspeed < 3;
+    this.stamina = clamp(this.stamina
+      - 0.30 * submersion * dt
+      + (resting ? 0.14 * dt : 0), 0, 1);
     if (depth > (this.cfg.maxDiveDepth ?? 7)) {
       this.position.y = w.waterLevel - (this.cfg.maxDiveDepth ?? 7);
       this.velocity.y = Math.max(this.velocity.y, 2.5);
@@ -395,6 +440,14 @@ export class Flight {
     const h = w.height(this.position.x, this.position.z);
     const clearance = this.cfg.groundClearance ?? 1.2;
     this.groundClearance = this.position.y - h;
+
+    // What is actually underneath you, which over the sea is the surface and
+    // not the sea bed a hundred metres below it. Measuring height above the
+    // bed is how a gull ends up flying serenely into a cliff: the number said
+    // there was plenty of room.
+    const surface = w.waterLevel !== undefined ? Math.max(h, w.waterLevel) : h;
+    this.surfaceClearance = this.position.y - surface;
+    this.overWater = w.waterLevel !== undefined && h <= w.waterLevel;
 
     if (this.position.y > h + clearance) {
       if (this.recoverTimer > 0) this.recoverTimer = Math.max(0, this.recoverTimer - dt);
@@ -434,7 +487,9 @@ export class Flight {
 
   _classify() {
     if (this.recoverTimer > 0) this.state = FLIGHT_STATE.RECOVER;
-    else if (this.underwater) this.state = FLIGHT_STATE.WATER;
+    else if (this.underwater) {
+      this.state = this._depth < 1.6 ? FLIGHT_STATE.FLOAT : FLIGHT_STATE.WATER;
+    }
     else if (this._stalled > 0.45) this.state = FLIGHT_STATE.STALL;
     else if (this.tuck > 0.45 || (this.vario < -7 && this.alpha < 0.05)) this.state = FLIGHT_STATE.DIVE;
     else if (this.flapping) this.state = FLIGHT_STATE.FLAP;
