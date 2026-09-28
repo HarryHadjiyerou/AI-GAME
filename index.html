@@ -69,6 +69,7 @@
         </select>
       </label>
       <label class="toggle"><input type="checkbox" id="optInvert"> Invert pitch</label>
+      <label class="toggle"><input type="checkbox" id="optRings" checked> Flight rings</label>
       <label class="toggle"><input type="checkbox" id="optMusic" checked> Music</label>
       <label class="toggle"><input type="checkbox" id="optSound" checked> Sound</label>
       <label class="toggle"><input type="checkbox" id="optVario" checked> Thermal beeper</label>
@@ -95,7 +96,10 @@
       <div><b id="hudSpeed">0</b><small>km/h</small></div>
       <div><b id="hudAlt">0</b><small>m above ground</small></div>
       <div class="vario"><i id="hudVario"></i><small id="hudVarioTxt">0.0</small></div>
+      <div id="hudLift" class="lift">▲ LIFT</div>
+      <div class="wind"><span id="hudWind">➤</span><small>wind</small></div>
     </div>
+    <div id="ringArrow" class="ring-arrow"><span>➤</span><small id="ringDist"></small></div>
     <div id="hint" class="hint"></div>
     <div id="toasts"></div>
     <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div><span class="zone-hint">steer</span></div>
@@ -113,8 +117,9 @@
       <button id="btnResume" class="wide">Resume</button>
       <button id="btnMenu" class="wide ghost">Choose another bird</button>
       <div class="help">
-        <p><b>Touch</b> — left thumb steers (push forward to dive, pull back to climb/flare). FLAP to take off and climb, hold BOOST for a burst of speed, hold DIVE to tuck your wings.</p>
-        <p><b>Keyboard</b> — WASD / arrows steer · Space flap · Shift boost · E dive · P pause</p>
+        <p><b>Touch</b> — right thumb steers (gentle pitch; push forward to nose down). Left thumb: hold FLAP to climb, hold DIVE to tuck and plunge (let go to swoop back up), hold BOOST for a burst of speed. Flick the stick hard left or right and let go for a barrel roll.</p>
+        <p><b>Keyboard</b> — WASD / arrows steer · Space flap · C dive · Shift boost · Q / E barrel roll · P pause</p>
+        <p><b>Fun</b> — ride the updraft on the windward side of cliffs and ridges (look for rising motes and listen for the beeper), then fold into a free-fall. Fly low through canyons, between trunks and under titan branches. Chase the glowing rings for speed.</p>
         <p><b>Tips</b> — circling birds mark thermals. Glide in slowly to land on rooftops, cliffs and branches.</p>
       </div>
     </div>

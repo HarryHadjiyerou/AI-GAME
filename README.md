@@ -28,28 +28,37 @@ Deep links for testing: `index.html#hawk`, `#seagull`, `#condor`, `#pigeon`.
 
 | | Touch (landscape) | Keyboard | Gamepad |
 |---|---|---|---|
-| Steer (bank / pitch) | Left thumb, a joystick that appears wherever you touch | WASD / arrows | Left stick |
-| Flap (take off, climb) | FLAP | Space | A |
-| Boost (fast wingbeats, drains stamina ring) | BOOST | Shift | RT / RB |
-| Tuck wings (dive) | DIVE | E / Q | LT / B |
+| Steer: bank, gentle pitch | **Right thumb**: a joystick appears wherever you touch the right half | WASD / arrows | Left stick |
+| Flap (take off, **climb**) | FLAP (left thumb) | Space | A |
+| Dive (tuck and **plunge**; release to swoop back up) | DIVE (left thumb) | C / F / Ctrl | LT / B |
+| Boost (fast wingbeats, drains the stamina ring) | BOOST (left thumb) | Shift | RT |
+| Barrel roll | Flick the stick hard left or right and let go | Q / E | LB / RB |
 | Pause | ❚❚ | P / Esc | |
 
-Pitch follows the flight-sim convention: push forward to dive, pull back to climb or flare. You can flip it with *Invert pitch* on the menu.
+The vertical stick axis is deliberately soft (45% of full authority, with a smoothing curve), so the stick is mainly for steering. Climbing is done with FLAP and descending with DIVE. Pitch follows the flight-sim convention (push forward to nose down); you can flip it with *Invert pitch*. Stick input is smoothed over ~0.1 s so small thumb jitters don't reach the bird.
 
-Gameplay notes: glide in slowly to land on rooftops, cliffs and the ground. When you're perched, steer turns you on the spot and FLAP launches. Circling birds mark thermals. The thermal beeper sounds when you're climbing. Close passes, skimming, gaps, big dives and seagull plunges all score points and build a combo.
+## Gameplay
+
+- **Dive and swoop:** hold DIVE and the bird tucks and steers its nose down towards a ~70° plunge. The hawk reaches ~200 km/h in 5 s and over 350 km/h in a long dive. Let go and the wings open and pull out automatically (up to ~4 g), converting the speed back into height. Push the stick to override the pull-out.
+- **Ride updrafts:** wind hitting the windward side of cliffs, canyon walls and ridges is deflected upwards (up to 10 m/s). A HUD arrow shows the wind direction, rising motes appear in lift, "▲ LIFT" lights up and the thermal beeper sounds. Circle or glide along a face to climb, then fold into a free-fall. Thermals (marked by circling birds) work the same way.
+- **Fly low:** skimming the ground or water, threading between trunks and titan limbs, flying through gaps between buildings and brushing through canopies all score. The closer and faster you go, the stronger the speed effects.
+- **Flight rings (optional, on by default):** a chain of glowing rings routed through the most fun terrain nearby: down canyons, low over rivers, under titan branches, along city streets. Each ring gives a burst of speed, some stamina and a rising chime; missing one breaks the chain. An arrow at the screen edge points to the next ring. Turn it off on the menu for free flight.
+- **Tricks and combo:** barrel roll, double roll, free-fall (tucked and near vertical for 1.4 s+), low pull-out (death-defying below 12 m), dive speed, updraft and thermal rides, skim, thread, gap, canopy, landing and the seagull's plunge. Chaining them raises the multiplier (up to ×8).
+- **Sense of speed:** air motes streaming past, dust, leaves and spray kicked up when low and fast, peripheral speed streaks, speed-dependent motion blur, and FOV that widens with speed and even more close to the ground. Wind noise rises with speed and a whoosh follows banks and rolls.
 
 ## How it works
 
 ```
 index.html / css/style.css     menu, loading screen, HUD, touch controls
 js/main.js                     UI flow, options, render loop
-js/game.js                     one play session: spawn, collisions/landing/water, scoring, per-frame update
+js/game.js                     one play session: spawn, wind/ridge lift, collisions/landing/water, speed effects, per-frame update
+js/gameplay.js                 trick detection and the flight-ring chain
 js/flight/
   birds.js                     per-bird numbers → aerodynamic coefficients
   physics.js                   lift (angle of attack), parasitic + induced drag, gravity, flapping, tuck, auto-trim
   head.js                      bird-eye camera: head stabilisation, glances, twitches, flap bob, speed FOV
   wings.js                     hawk: wings cut from the photogrammetry scan, bent in a vertex shader; other birds: procedural feather rig
-  input.js                     virtual joystick + buttons, keyboard, gamepad
+  input.js                     right-hand virtual joystick (smoothed, soft pitch, flick-to-roll) + buttons, keyboard, gamepad
 js/world/
   fields.js                    procedural height/mask functions per biome (shared by main thread and worker)
   terrainWorker.js             builds terrain chunks, tree tiles, height/light maps off the main thread (incl. baked ray-marched lighting)

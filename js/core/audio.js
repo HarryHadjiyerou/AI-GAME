@@ -71,7 +71,11 @@ export class Audio {
   async loadBuffer(name) {
     if (this.buffers.has(name)) return this.buffers.get(name);
     const p = fetch(`assets/audio/${name}.m4a`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
-      .then((ab) => new Promise((res, rej) => this.ctx.decodeAudioData(ab, res, rej))).catch(() => null);
+      .then((ab) => new Promise((res) => {
+        // callback form for older Safari; the returned promise (newer browsers) is also caught
+        const pr = this.ctx.decodeAudioData(ab, res, () => res(null));
+        if (pr && pr.catch) pr.catch(() => res(null));
+      })).catch(() => null);
     this.buffers.set(name, p);
     return p;
   }
@@ -162,6 +166,15 @@ export class Audio {
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = 2;
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
     o.connect(f); f.connect(g); g.connect(this.sfx); o.start(t); lfo.start(t); o.stop(t + 1.05); lfo.stop(t + 1.05);
+  }
+  // ring chime: rising pentatonic with the chain length
+  chime(n) {
+    if (!this.ctx) return;
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    const f = 523.25 * Math.pow(2, scale[Math.min(n - 1, scale.length - 1)] / 12);
+    this.tone(f, f * 1.002, 0.5, 0.07, 'triangle');
+    this.tone(f * 2, f * 2, 0.3, 0.025, 'sine');
+    setTimeout(() => this.tone(f * 1.5, f * 1.5, 0.4, 0.035, 'sine'), 70);
   }
   splash() { this.burst(2500, 0.7, 0.5, 'lowpass', 250); this.burst(300, 0.5, 0.45, 'lowpass', 70); }
   thump(v = 0.5) { this.tone(110, 38, 0.35, v, 'sine'); this.burst(900, 0.25, v * 0.5); }

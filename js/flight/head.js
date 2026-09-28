@@ -70,7 +70,7 @@ export class Head {
     const yawB = Math.atan2(-dir.x, -dir.z);
     const pitchB = Math.asin(clamp(dir.y, -1, 1));
     // head roll is only a fraction of the body's bank
-    const roll = -body.bank * 0.42;
+    const roll = -body.bank * 0.42 - body.trickRoll; // head follows a barrel roll fully
     this.look.t = body.bank * 0.22; // look into the turn
     const lk = this.look.update(dt);
     const flapBob = Math.sin(body.flapPhase) * body.flapAmt * (0.006 + 0.004 * (body.boosting ? 1 : 0));
@@ -89,14 +89,14 @@ export class Head {
     this._q.setFromEuler(this._e);
     if (!this.init) { this.smoothQ.copy(this._q); this.init = true; }
     // Head stabilisation: slerp towards target (filters body wobble but tracks manoeuvres)
-    this.smoothQ.slerp(this._q, 1 - Math.exp(-dt * (perched ? 6 : 14)));
+    this.smoothQ.slerp(this._q, body.rollDir ? 1 : 1 - Math.exp(-dt * (perched ? 6 : 14)));
     cam.quaternion.copy(this.smoothQ);
     cam.position.copy(body.pos);
     cam.position.y += 0.06 + Math.sin(body.flapPhase + 1.2) * body.flapAmt * 0.02;
 
     // FOV widens with speed and boost
     const base = cfg.cam.fov;
-    const target = base + clamp((sp - body.cfg.vBest) * 0.22, -4, 14) + (body.boosting ? 6 : 0) + this.fovKick;
+    const target = base + clamp((sp - body.cfg.vBest) * 0.22, -4, 14) + (body.boosting ? 6 : 0) + this.fovKick + (this.proximity || 0) * 7;
     this.fovKick *= Math.exp(-dt * 3);
     cam.fov += (target - cam.fov) * Math.min(1, dt * 3);
     cam.updateProjectionMatrix();

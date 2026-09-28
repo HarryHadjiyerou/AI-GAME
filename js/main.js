@@ -44,7 +44,9 @@ $('#optInvert').checked = !!opts.invert;
 $('#optSound').checked = opts.sound !== false;
 $('#optVario').checked = opts.vario !== false;
 $('#optMusic').checked = opts.music !== false;
-for (const id of ['optQuality', 'optInvert', 'optSound', 'optVario', 'optMusic']) $('#' + id).addEventListener('change', () => {
+$('#optRings').checked = opts.rings !== false;
+for (const id of ['optQuality', 'optInvert', 'optSound', 'optVario', 'optMusic', 'optRings']) $('#' + id).addEventListener('change', () => {
+  opts.rings = $('#optRings').checked;
   opts.quality = $('#optQuality').value; opts.invert = $('#optInvert').checked; opts.sound = $('#optSound').checked; opts.vario = $('#optVario').checked; opts.music = $('#optMusic').checked;
   saveOpts();
   applyAudioOpts();
@@ -126,6 +128,20 @@ const ui = {
     $('#hudScore').textContent = Math.round(s.score).toLocaleString();
     $('#hudCombo').textContent = s.combo > 1.05 ? `x${s.combo.toFixed(1)}` : '';
     $('#staminaRing').style.strokeDashoffset = String(289 * (1 - s.stamina));
+    $('#hudLift').classList.toggle('on', s.lift > 1.2);
+    // wind arrow: relative to where we're heading (up = tailwind)
+    $('#hudWind').style.transform = `rotate(${(-s.windRel * 180 / Math.PI) - 90}deg)`;
+    const ra = $('#ringArrow');
+    if (s.ring && s.ring.off) {
+      const ang = Math.atan2(-s.ring.y, s.ring.x);
+      const W = innerWidth / 2 - 50, H = innerHeight / 2 - 50;
+      const k = Math.min(W / Math.abs(Math.cos(ang) || 1e-3), H / Math.abs(Math.sin(ang) || 1e-3));
+      ra.style.display = 'block';
+      ra.style.left = innerWidth / 2 + Math.cos(ang) * k + 'px';
+      ra.style.top = innerHeight / 2 + Math.sin(ang) * k + 'px';
+      ra.querySelector('span').style.transform = `rotate(${ang * 180 / Math.PI}deg)`;
+      $('#ringDist').textContent = Math.round(s.ring.dist) + ' m';
+    } else ra.style.display = 'none';
   },
 };
 
@@ -145,6 +161,7 @@ async function startGame(bird) {
   try { await screen.orientation?.lock?.('landscape'); } catch { /* unsupported */ }
   if (game) { game.dispose(); game = null; }
   game = new Game(renderer, ui, input, audio);
+  game.ringsEnabled = opts.rings !== false;
   await game.start(bird, q, (p) => { $('#loadBar').style.width = Math.round(p * 100) + '%'; });
   show('hud');
 }

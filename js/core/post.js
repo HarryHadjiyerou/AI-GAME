@@ -86,12 +86,12 @@ export class Post {
         uCloud: { value: 0 }, uCloudColor: { value: new THREE.Color(0.9, 0.92, 0.95) },
         uFlash: { value: 0 }, uDamage: { value: 0 }, uTime: { value: 0 }, uBloom: { value: 0.28 },
         uTint: { value: new THREE.Color(1, 1, 1) }, uLdr: { value: this.hdr ? 0 : 1 },
-        tRays: { value: null }, uRays: { value: 0 }, uRayColor: { value: new THREE.Color(1, 0.9, 0.75) },
+        tRays: { value: null }, uRays: { value: 0 }, uStreak: { value: 0 }, uRayColor: { value: new THREE.Color(1, 0.9, 0.75) },
       },
       vertexShader: QUAD_VS,
       fragmentShader: /* glsl */ `
         uniform sampler2D tScene, tBloom, tRays;
-        uniform float uRays;
+        uniform float uRays, uStreak;
         uniform vec3 uRayColor;
         uniform float uAspect, uFish, uSpeed, uBlur, uExposure, uSat, uContrast, uUnder, uCloud, uFlash, uDamage, uTime, uBloom, uLdr;
         uniform vec3 uUnderColor, uCloudColor, uTint;
@@ -137,6 +137,16 @@ export class Post {
           col /= wsum;
           col += texture2D(tBloom, suv).rgb * uBloom;
           col += texture2D(tRays, suv).rgb * uRays * uRayColor;
+          // speed streaks: thin radial lines rushing past in the periphery
+          if (uStreak > 0.01) {
+            float ang = atan(c.y, c.x);
+            float lane = floor(ang * 90.0);
+            float h1 = hash(vec2(lane, 3.7));
+            float h2 = hash(vec2(lane, 9.1));
+            float run = fract(r * 1.6 - uTime * (2.5 + h2 * 3.0) + h1);
+            float line = step(0.965, h1) * smoothstep(0.0, 0.3, run) * smoothstep(1.0, 0.6, run);
+            col += vec3(1.0) * line * smoothstep(0.55, 1.2, r) * uStreak * 0.35;
+          }
           col *= uTint;
           // Clouds and underwater murk
           col = mix(col, uCloudColor, uCloud * 0.85);

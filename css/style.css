@@ -65,7 +65,7 @@ button { font: inherit; color: inherit; }
 .hud-score span { font-weight: 300; font-size: 22px; font-variant-numeric: tabular-nums; }
 .hud-score small { display: block; color: var(--accent); font-size: 11px; letter-spacing: 0.1em; min-height: 14px; }
 #btnPause { pointer-events: auto; background: var(--glass); border: 1px solid var(--line); border-radius: 50%; width: 38px; height: 38px; font-size: 12px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.hud-instruments { position: absolute; top: 50%; right: calc(16px + var(--safe-r)); transform: translateY(-110%); display: flex; flex-direction: column; gap: 8px; text-align: right; pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
+.hud-instruments { position: absolute; top: calc(56px + var(--safe-t)); right: calc(16px + var(--safe-r)); display: flex; flex-direction: column; gap: 8px; text-align: right; pointer-events: none; text-shadow: 0 1px 6px rgba(0,0,0,0.5); }
 .hud-instruments b { font-weight: 300; font-size: 22px; font-variant-numeric: tabular-nums; }
 .hud-instruments small { display: block; color: var(--ink-dim); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
 .vario { position: relative; height: 34px; }
@@ -79,17 +79,17 @@ button { font: inherit; color: inherit; }
 .toast small { font-family: Inter, sans-serif; font-size: 12px; color: var(--accent); margin-left: 8px; letter-spacing: 0.08em; }
 @keyframes toast { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px); } }
 
-#stickZone { position: absolute; left: 0; top: 18%; bottom: 0; width: 45%; touch-action: none; }
-.zone-hint { position: absolute; left: calc(40px + var(--safe-l)); bottom: calc(26px + var(--safe-b)); color: rgba(255,255,255,0.28); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; pointer-events: none; }
-#stickBase { position: fixed; left: calc(110px + var(--safe-l)); top: 72%; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); opacity: 0.45; transition: opacity 0.2s; pointer-events: none; }
+#stickZone { position: absolute; right: 0; top: 18%; bottom: 0; width: 50%; touch-action: none; }
+.zone-hint { position: absolute; right: calc(40px + var(--safe-r)); bottom: calc(26px + var(--safe-b)); color: rgba(255,255,255,0.28); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; pointer-events: none; }
+#stickBase { position: fixed; left: calc(100% - 120px - var(--safe-r)); top: 70%; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); opacity: 0.45; transition: opacity 0.2s; pointer-events: none; }
 #stickBase.active { opacity: 1; margin: 0; transform: translate(-50%, -50%); }
 #stickKnob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.35); transform: translate(-50%, -50%); box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-.buttons { position: absolute; right: calc(18px + var(--safe-r)); bottom: calc(18px + var(--safe-b)); width: 230px; height: 190px; pointer-events: none; }
+.buttons { position: absolute; left: calc(18px + var(--safe-l)); bottom: calc(18px + var(--safe-b)); width: 230px; height: 190px; pointer-events: none; }
 .btn { position: absolute; pointer-events: auto; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(12,16,20,0.35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-size: 11px; font-weight: 600; letter-spacing: 0.14em; color: rgba(255,255,255,0.85); touch-action: none; transition: transform 0.08s, background 0.12s; }
 .btn.down { transform: scale(0.92); background: rgba(255,210,122,0.35); }
-.btn.big { width: 104px; height: 104px; right: 0; bottom: 0; font-size: 13px; }
-#btnBoost { width: 80px; height: 80px; right: 112px; bottom: 6px; }
-#btnDive { width: 72px; height: 72px; right: 40px; bottom: 116px; }
+.btn.big { width: 108px; height: 108px; left: 0; bottom: 0; font-size: 13px; }
+#btnBoost { width: 78px; height: 78px; left: 118px; bottom: 4px; }
+#btnDive { width: 76px; height: 76px; left: 16px; bottom: 122px; }
 .ring { position: absolute; inset: -5px; width: calc(100% + 10px); height: calc(100% + 10px); transform: rotate(-90deg); pointer-events: none; }
 .ring circle { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 289; stroke-dashoffset: 0; stroke-linecap: round; transition: stroke-dashoffset 0.1s; }
 
@@ -115,3 +115,11 @@ button { font: inherit; color: inherit; }
   .brand p { display: none; }
 }
 @media (max-width: 700px) and (orientation: portrait) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.lift { font-size: 11px; letter-spacing: 0.2em; color: var(--accent); opacity: 0; transition: opacity 0.3s; }
+.lift.on { opacity: 1; }
+.wind { display: flex; flex-direction: column; align-items: flex-end; }
+.wind span { display: inline-block; font-size: 16px; color: rgba(255,255,255,0.8); transition: transform 0.2s; }
+.ring-arrow { position: absolute; left: 50%; top: 50%; pointer-events: none; display: none; transform: translate(-50%, -50%); text-align: center; color: #ffd27a; text-shadow: 0 0 8px rgba(255,190,90,0.8); }
+.ring-arrow span { display: inline-block; font-size: 26px; }
+.ring-arrow small { display: block; font-size: 10px; letter-spacing: 0.1em; color: rgba(255,230,180,0.85); }

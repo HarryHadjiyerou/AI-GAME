@@ -14,6 +14,7 @@ import { Trees } from './world/trees.js';
 import { City } from './world/city.js';
 import { Thermals, Flocks, Particles, CoastSet, Waterfalls } from './world/extras.js';
 import { Titans } from './world/titans.js';
+import { Tricks, Rings } from './gameplay.js';
 import { BIRDS } from './flight/birds.js';
 import { BirdBody } from './flight/physics.js';
 import { Head } from './flight/head.js';
@@ -142,6 +143,9 @@ export class Game {
     renderer.compile(scene, camera);
     onProgress(1);
 
+    this.tricks = new Tricks(this);
+    this.rings = new Rings(this.scene, this);
+    this.rings.enabled = this.ringsEnabled !== false;
     this.score = 0; this.combo = 1; this.comboT = 0;
     this.diveMax = 0; this.thermalGain = 0; this.thermalStart = null;
     this.time = 0;
@@ -262,12 +266,26 @@ export class Game {
     const w = this.wind.clone().multiplyScalar(gust);
     const agl = b.pos.y - Math.max(gh, 0);
     w.multiplyScalar(clamp(0.3 + agl / 60, 0.3, 1));
-    // ridge lift where wind meets slopes
-    const n = normalAt(f, b.pos.x, b.pos.z, 12);
-    const into = -(this.wind.x * n[0] + this.wind.z * n[2]);
-    let up = Math.max(0, into) * this.biome.ridgeLift * Math.exp(-Math.max(0, agl) / 140) * (1 - n[1] * 0.5);
+    // ridge lift: wind deflected upwards by rising ground just downwind of the bird (in front of a
+    // windward face) or directly under it (over the slope). Strong below the crest, fading above it.
+    const ws = Math.hypot(this.wind.x, this.wind.z) * gust;
+    const wdx = this.wind.x / (ws || 1) * gust, wdz = this.wind.z / (ws || 1) * gust;
+    const h0 = Math.max(gh, 0);
+    const hd1 = f.height(b.pos.x + wdx * 90, b.pos.z + wdz * 90), hd2 = f.height(b.pos.x + wdx * 240, b.pos.z + wdz * 240);
+    const crest = Math.max(h0, hd1, hd2);
+    const rise = Math.max(0, (Math.max(hd1, hd2) - h0) / 240);
+    const n = normalAt(f, b.pos.x, b.pos.z, 20);
+    const over = Math.max(0, -(wdx * n[0] + wdz * n[2])); // windward steepness under the bird
+    const hf = 1 - THREE.MathUtils.smoothstep(b.pos.y, crest - 20, crest + 260);
+    let ridge = ws * Math.min(1.6, Math.max(rise * 1.7, over * 1.3)) * this.biome.ridgeLift * hf;
+    // gentle sink in the lee of ridges
+    const lee = Math.max(0, (wdx * n[0] + wdz * n[2])) * ws * 0.25 * Math.exp(-agl / 200);
+    ridge = Math.min(10, ridge) - lee;
+    let up = ridge;
+    this.ridge = Math.max(0, ridge);
     // thermals
-    up += this.thermals.updraft(b.pos, Math.max(gh, 0));
+    this.thermal = this.thermals.updraft(b.pos, Math.max(gh, 0));
+    up += this.thermal;
     w.y += up;
     this.updraft = up;
     return w;
@@ -461,6 +479,41 @@ export class Game {
     this.ui.hint('Tap FLAP to take off', 3);
   }
 
+  // Sense of speed: air motes streaming past, dust/leaf/spray kicked up when low and fast, and
+  // rising motes when riding lift so updrafts are visible.
+  speedEffects(dt, speed, agl) {
+    const b = this.body, P = this.particles;
+    if (b.mode !== 'flying') return;
+    const { fwd } = b.axes();
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x).normalize();
+    const mote = new THREE.Color(1, 1, 1);
+    const n = speed * dt * 1.4;
+    for (let i = 0; i < n; i++) {
+      const p = b.pos.clone().addScaledVector(fwd, 12 + Math.random() * 60).addScaledVector(right, (Math.random() - 0.5) * 50).add(new THREE.Vector3(0, (Math.random() - 0.5) * 30, 0));
+      P.emit(p, new THREE.Vector3(), mote, 0.25, 0.1 + Math.random() * 0.1, 2.5, 0, 0, 0);
+    }
+    // kicked-up dust / leaves / spray near the surface
+    if (agl < 22 && speed > 18) {
+      const k = (1 - agl / 22) * speed * dt * 0.8;
+      const gh = this.field.height(b.pos.x, b.pos.z);
+      const water = gh < 0.3;
+      const col = water ? new THREE.Color(0.9, 0.95, 1) : this.biome.id === 'forest' ? new THREE.Color(0.35, 0.3, 0.18) : new THREE.Color(0.6, 0.55, 0.45);
+      for (let i = 0; i < k; i++) {
+        const p = new THREE.Vector3(b.pos.x + (Math.random() - 0.5) * 6, (water ? this.water.surfaceAt(b.pos.x, b.pos.z, this.time) : gh) + 0.3, b.pos.z + (Math.random() - 0.5) * 6);
+        P.emit(p, new THREE.Vector3(b.vel.x * 0.25, 2 + Math.random() * 3, b.vel.z * 0.25), col, water ? 0.7 : 0.45, water ? 0.25 : 0.18, 1.2, water ? 9.8 : 2, 1.5, 2);
+      }
+    }
+    // visible lift
+    const lift = Math.max(this.ridge || 0, this.thermal || 0);
+    if (lift > 1) {
+      const c = this.biome.id === 'forest' ? new THREE.Color(1, 0.95, 0.75) : new THREE.Color(0.95, 0.97, 1);
+      for (let i = 0; i < lift * dt * 6; i++) {
+        const p = b.pos.clone().addScaledVector(fwd, 10 + Math.random() * 50).addScaledVector(right, (Math.random() - 0.5) * 60).add(new THREE.Vector3(0, -20 + Math.random() * 30, 0));
+        P.emit(p, new THREE.Vector3(0, lift * 1.4, 0), c, 0.5, 0.12, 3, 0, 0, 0.5);
+      }
+    }
+  }
+
   hurt(a) { this.post.params.uDamage.value = Math.max(this.post.params.uDamage.value, a); this.head.shake = Math.max(this.head.shake, 0.04 * a); navigator.vibrate?.(30); }
   splash(p, s) {
     const c = new THREE.Color(0.92, 0.97, 1);
@@ -532,6 +585,8 @@ export class Game {
         this.audio.whoosh();
       }
     }
+    if (inp.rollTrick && b.mode === 'flying' && this.stun <= 0 && b.startRoll(inp.rollTrick)) this.audio.whoosh(inp.rollTrick * 0.6);
+    if (b.rollDir) inp.roll = 0;
     const wind = this.computeWind(dt);
     const env = { wind: () => wind, altitude: b.pos.y - Math.max(this.groundH, 0) };
     const prevY = b.pos.y;
@@ -543,15 +598,10 @@ export class Game {
     const speed = b.vel.length();
     const climb = (b.pos.y - prevY) / Math.max(dt, 1e-3);
     this.climbF = (this.climbF || 0) + (climb - (this.climbF || 0)) * Math.min(1, dt * 2);
-    if (b.tuck > 0.5 && b.vel.y < -10) this.diveMax = Math.max(this.diveMax, speed);
-    else if (this.diveMax > 0) {
-      if (this.diveMax > cfg.vBest * 1.9) this.award(`DIVE ${Math.round(this.diveMax * 3.6)} km/h`, Math.round(this.diveMax));
-      this.diveMax = 0;
-    }
-    if (this.updraft > 0.8 && this.climbF > 0.5) {
-      if (this.thermalStart === null) this.thermalStart = b.pos.y;
-      if (b.pos.y - this.thermalStart > 100) { this.award('THERMAL', 60); this.thermalStart = b.pos.y; }
-    } else if (this.updraft < 0.2) this.thermalStart = null;
+    const aglNow = b.pos.y - Math.max(this.groundH, 0);
+    if (b.mode === 'flying') this.tricks.update(dt, { body: b, fwd: b.axes().fwd.clone(), speed, agl: aglNow, climb: this.climbF, ridge: this.ridge, thermal: this.thermal });
+    if (b.mode === 'flying') this.rings.update(dt, b, this.camera);
+    this.speedEffects(dt, speed, aglNow);
     this.nearCooldown -= dt;
     this.comboT -= dt;
     if (this.comboT <= 0) this.combo = Math.max(1, this.combo - dt * 2);
@@ -594,6 +644,10 @@ export class Game {
     const boost = b.boosting ? 1 : 0;
     this.speedFx = (this.speedFx || 0) + ((clamp((speed - cfg.vBest * 1.3) / (cfg.vBest * 2.5), 0, 1) * 0.6 + boost * 0.55) - (this.speedFx || 0)) * Math.min(1, dt * 3);
     pp.uSpeed.value = this.speedFx;
+    const aglFx = Math.max(0, st.agl);
+    const prox = clamp((40 - aglFx) / 40, 0, 1) * clamp((speed - 18) / 30, 0, 1);
+    pp.uStreak.value += (clamp(this.speedFx * 1.2 + prox * 0.7, 0, 1) - pp.uStreak.value) * Math.min(1, dt * 4);
+    this.head.proximity = prox;
     pp.uBlur.value = 0.5 + b.tuck * 0.5;
     pp.uUnder.value += ((b.mode === 'underwater' ? 1 : 0) - pp.uUnder.value) * Math.min(1, dt * 8);
     pp.uCloud.value = this.clouds.inside;
@@ -624,7 +678,9 @@ export class Game {
     const rollRate = (b.bank - (this.prevBank ?? b.bank)) / Math.max(dt, 1e-3);
     this.prevBank = b.bank;
     this.audio.update(dt, { speed, agl: st.agl, turn: b.bank, rollRate, tuck: b.tuck, flapPhase: b.flapPhase, flapAmt: b.flapAmt, flapVol: cfg.id === 'condor' ? 1.6 : cfg.id === 'pigeon' ? 0.7 : 1, boost: b.boosting, climb: this.climbF, perched: b.mode !== 'flying', under: b.mode === 'underwater' });
-    this.ui.hud({ speed, agl: st.agl, climb: this.climbF, stamina: b.stamina, score: this.score, combo: this.combo });
+    const { fwd: hf } = b.axes();
+    const windRel = Math.atan2(this.wind.x, this.wind.z) - Math.atan2(hf.x, hf.z);
+    this.ui.hud({ speed, agl: st.agl, climb: this.climbF, stamina: b.stamina, score: this.score, combo: this.combo, ring: this.rings.enabled ? this.rings.arrow : null, chain: this.rings.chain, windRel, lift: Math.max(this.ridge || 0, this.thermal || 0) });
 
     // ----- dynamic resolution -----
     this.frames++; this.fpsAcc += dtRaw;

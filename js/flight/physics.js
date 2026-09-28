@@ -23,6 +23,23 @@ export class BirdBody {
     this.alpha = 0; this.beta = 0; this.bank = 0; this.airspeed = 0; this.gLoad = 1; this.stall = 0;
     this.lastForce = new THREE.Vector3();
     this.boosting = false;
+    this.trickRoll = 0; this.rollT = 0; this.rollDir = 0; this.rollDone = 0;
+    this.pullout = 0; // 0..1, how hard the auto swoop is pulling out of a dive
+    this.wasDiving = false;
+    this._vq = new THREE.Quaternion();
+  }
+
+  // Orientation including the cosmetic barrel-roll offset (for camera and wings).
+  get visualQuat() {
+    if (!this.trickRoll) return this.quat;
+    return this._vq.copy(this.quat).multiply(_dq.setFromAxisAngle(_axis.set(0, 0, 1), -this.trickRoll));
+  }
+
+  startRoll(dir) {
+    if (this.rollDir || this.mode !== 'flying') return false;
+    this.rollDir = dir; this.rollT = 0;
+    this.rollDur = this.cfg.rollDur || 0.8;
+    return true;
   }
 
   axes() {
@@ -50,6 +67,14 @@ export class BirdBody {
   }
 
   step(dt, input, env) {
+    // barrel roll: a full 360 deg roll about the flight path; flight forces stay wings-level meanwhile
+    this.rollDone = 0;
+    if (this.rollDir) {
+      this.rollT += dt;
+      const t = Math.min(1, this.rollT / this.rollDur);
+      this.trickRoll = this.rollDir * Math.PI * 2 * (t * t * (3 - 2 * t));
+      if (t >= 1) { this.rollDone = this.rollDir; this.rollDir = 0; this.trickRoll = 0; }
+    }
     const n = Math.max(1, Math.ceil(dt / (1 / 120)));
     const h = dt / n;
     for (let i = 0; i < n; i++) this.substep(h, input, env);
@@ -136,14 +161,28 @@ export class BirdBody {
     if (this.flapAmt > 0.05) {
       // Flapping: steer the flight path towards a gentle climb (a shallower one when boosting for speed).
       const gamma = Math.asin(clamp(this.vel.y / Math.max(this.vel.length(), 0.1), -1, 1));
-      const gT = wantBoost ? 0.06 : 0.16;
+      const gT = wantBoost ? 0.12 : 0.3;
       const pathLift = m * (c.g * Math.cos(gamma) + (gT - gamma) * 2.2 * Math.max(V, 4)) / Math.max(Math.cos(bank0), 0.4);
       wantLift += (clamp(pathLift, 0.3 * m * c.g, 2.2 * m * c.g) - wantLift) * this.flapAmt;
     }
+    // swoop: after releasing DIVE at speed the bird pulls out, converting speed into height
+    if (input.dive) this.pullout = 0;
+    else if (this.wasDiving && V > c.vBest * 1.15) this.pullout = 1;
+    if (this.pullout > 0) {
+      const pathDown = Math.max(0, -this.vel.y / Math.max(this.vel.length(), 1));
+      wantLift += m * c.g * (1.2 + 1.8 * pathDown) * this.pullout * (1 - Math.min(1, Math.abs(input.pitch) * 2.5));
+      this.pullout = Math.max(0, this.pullout - dt * (pathDown < 0.05 ? 1.2 : 0.15));
+    }
+    this.wasDiving = input.dive || (this.wasDiving && this.tuck > 0.3);
     const alphaHold = wantLift / Math.max(q * S * c.alphaSlope, 1e-3);
-    const alphaCap = Math.min(c.alphaTrim * (1 + 1.8 * sb + 0.5 * this.flapAmt), (c.clMax * 0.85) / c.alphaSlope);
+    const alphaCap = Math.min(c.alphaTrim * (1 + 1.8 * sb + 0.5 * this.flapAmt + 2.5 * this.pullout), (c.clMax * 0.85) / c.alphaSlope);
     const alphaTarget = Math.min(alphaHold, alphaCap) * (1 - this.tuck);
     let pitchRate = input.pitch * c.pitchRate * authority - (this.alpha - alphaTarget) * c.stability * 2 * vfac;
+    // DIVE: tuck and steer the nose down towards a steep plunge (~70 deg)
+    if (input.dive && this.mode === 'flying') {
+      const noseErr = Math.asin(clamp(fwd.y, -1, 1)) + 1.2;
+      pitchRate -= clamp(noseErr, 0, 1) * 1.8 * (1 - Math.max(0, input.pitch) * 0.8);
+    }
     // at very low speed gravity pulls the nose down
     pitchRate -= (1 - smooth(c.vStall * 0.3, c.vStall, V)) * Math.max(0, fwd.y + 0.2) * 1.2 * (this.takeoffTimer > 0 ? 0.15 : 1);
     const bank = Math.asin(clamp(-right.y, -1, 1));

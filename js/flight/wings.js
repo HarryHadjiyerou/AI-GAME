@@ -235,7 +235,7 @@ export class Wings {
     const cfg = this.cfg, w = cfg.wing;
     this.t += dt;
     this.root.position.copy(cam.position);
-    this.root.quaternion.copy(body.quat);
+    this.root.quaternion.copy(body.visualQuat);
     this.sun.position.copy(cam.position).addScaledVector(sunDir, 10);
     this.sun.target.position.copy(cam.position);
 
