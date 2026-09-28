@@ -32,6 +32,9 @@ function edgeIndex(k, N) {
   k -= W; return (N - k) * W;
 }
 
+// Linear albedo normalisation per Poly Haven texture (measured averages -> plausible real albedos).
+const GAIN = { grass: 1.55, forestfloor: 1.15, rock: 3.2, cliff: 1.8, snow: 3.1, sand: 1.55, asphalt: 1.2 };
+
 export function createTerrainMaterial(tex, biome) {
   const L = biome.layers;
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.7 });
@@ -42,7 +45,7 @@ export function createTerrainMaterial(tex, biome) {
     tTopD: { value: tex[L.top + '_diff'] }, tTopN: { value: tex[L.top + '_nor'] },
     tNoise: { value: tex.noise },
     uScales: { value: new THREE.Vector4(...L.scales) },
-    uTints: { value: L.tints.map((c) => new THREE.Color(c)) },
+    uTints: { value: L.tints.map((c, i) => new THREE.Color(c).multiplyScalar(GAIN[[L.base, L.sec, L.rock, L.top][i]] || 1)) },
     uSecSel: { value: new THREE.Vector4(...L.secSel) },
     uWetSel: { value: new THREE.Vector4(...L.wetSel) },
     uCanopy: { value: new THREE.Color(L.canopy) },
@@ -52,17 +55,21 @@ export function createTerrainMaterial(tex, biome) {
     uCityGrid: { value: new THREE.Vector2(CITY.PITCH, CITY.ROAD) },
     tAsphalt: { value: tex.asphalt_diff },
     uWaterLevel: { value: 0 },
+    uStrata: { value: biome.id === 'forest' ? 1 : 0 },
+    uDebug: { value: 0 },
+    uBounce: { value: new THREE.Color(biome.bounce || 0x6a5040) },
   };
   patchMaterial(mat, (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 masks;\nvarying vec4 vMasks;\nvarying vec3 vWN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMasks = masks;\nvWN = normal;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 masks;\nattribute vec2 light;\nvarying vec4 vMasks;\nvarying vec3 vWN;\nvarying vec2 vLight;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMasks = masks;\nvWN = normal;\nvLight = light;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + TERRAIN_PARS)
       .replace('#include <map_fragment>', TERRAIN_MAP)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = splatRough;')
-      .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(splatN, 0.0)).xyz);');
+      .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(splatN, 0.0)).xyz);')
+      .replace('#include <aomap_fragment>', TERRAIN_LIGHT);
   }, 'terrain');
   mat.userData.uniforms = uniforms;
   return mat;
@@ -74,7 +81,9 @@ uniform vec4 uScales;
 uniform vec3 uTints[4];
 uniform vec4 uSecSel, uWetSel;
 uniform vec3 uCanopy;
-uniform float uCanopyAmt, uCity, uWaterLevel;
+uniform float uCanopyAmt, uCity, uWaterLevel, uStrata, uDebug;
+uniform vec3 uBounce;
+varying vec2 vLight;
 uniform vec2 uRockSlope, uCityGrid;
 varying vec4 vMasks;
 varying vec3 vWN;
@@ -125,6 +134,7 @@ if (wRock > 0.01) {
   vec2 uvX = wp.zy / uScales.z, uvZ = wp.xy / uScales.z, uvY = wp.xz / uScales.z;
   vec3 wts = pow(an, vec3(4.0)); wts /= (wts.x + wts.y + wts.z);
   vec3 cR = sampleD(tRockD, uvX, 0.3) * wts.x + sampleD(tRockD, uvZ, 0.3) * wts.z + sampleD(tRockD, uvY, 0.3) * wts.y;
+  cR = mix(cR, vec3(dot(cR, vec3(0.2126, 0.7152, 0.0722))), 0.6); // the scans are yellowish; bias towards grey stone
   vec3 nX = unpackN(texture2D(tRockN, uvX));
   vec3 nZ = unpackN(texture2D(tRockN, uvZ));
   vec3 rN = normalize(wn + (vec3(0.0, nX.y, nX.x) * sign(wn.x) * wts.x + vec3(nZ.x, nZ.y, 0.0) * sign(wn.z) * wts.z) * 1.2);
@@ -153,6 +163,24 @@ if (uCity > 0.5 && vMasks.z < 0.5) {
   col = mix(col, cityCol, 1.0 - wRock);
 }
 
+// Layered sandstone (canyon walls, mesas) on arid ground
+if (uStrata > 0.5 && vMasks.w > 0.02) {
+  float hb = wp.y / 120.0 + (nz.g - 0.5) * 0.9 + nz2.r * 0.25;
+  float band = fract(hb);
+  vec3 s1 = vec3(0.60, 0.26, 0.15), s2 = vec3(0.80, 0.47, 0.27), s3 = vec3(0.90, 0.74, 0.55), s4 = vec3(0.47, 0.22, 0.16);
+  vec3 strata = band < 0.25 ? mix(s1, s2, band * 4.0) : band < 0.5 ? mix(s2, s3, (band - 0.25) * 4.0) : band < 0.75 ? mix(s3, s4, (band - 0.5) * 4.0) : mix(s4, s1, (band - 0.75) * 4.0);
+  float lum = dot(col, vec3(0.3, 0.55, 0.15));
+  // desert varnish: dark vertical streaks down the cliff faces
+  vec2 tng = normalize(vec2(-wn.z, wn.x) + 1e-4);
+  float along = dot(wp.xz, tng);
+  float streak = texture2D(tNoise, vec2(along / 70.0, wp.y / 900.0)).b;
+  vec3 rockA = strata * (0.5 + lum * 1.2) * mix(1.0, 0.55 + 0.45 * smoothstep(0.25, 0.65, streak), wRock);
+  // ledges catch light, undercuts are darker
+  rockA *= 0.85 + 0.3 * smoothstep(0.6, 0.95, wn.y);
+  vec3 dirt = vec3(0.58, 0.3, 0.17) * (0.55 + lum * 0.9);
+  vec3 arid = mix(dirt, rockA, max(wRock, 0.25));
+  col = mix(col, arid, vMasks.w * (1.0 - wTop));
+}
 // Far forest canopy tint (trees become texture at distance)
 float canopy = vMasks.x * uCanopyAmt * smoothstep(250.0, 1300.0, dist);
 vec3 canCol = uCanopy * (0.55 + 0.9 * nz2.r * nz.b);
@@ -173,6 +201,22 @@ if (depth > 0.0) col *= exp(-depth * vec3(0.35, 0.12, 0.08));
 vec3 splatN = splatNW;
 float splatRough = mix(0.95, 0.6, wet) - wTop * 0.25;
 diffuseColor.rgb *= col;
+if (uDebug > 0.5) diffuseColor.rgb = uDebug < 1.5 ? vec3(wRock, vLight.x, vLight.y) : wn * 0.5 + 0.5;
+`;
+
+const TERRAIN_LIGHT = /* glsl */ `
+#include <aomap_fragment>
+// Baked height-field ray-march: sun shadow + sky visibility (x, y)
+float sunVis = smoothstep(0.0, 1.0, vLight.x);
+float skyVis = vLight.y;
+reflectedLight.directDiffuse *= sunVis;
+reflectedLight.directSpecular *= sunVis;
+float amb = mix(0.18, 1.0, skyVis * skyVis);
+reflectedLight.indirectDiffuse *= amb;
+reflectedLight.indirectSpecular *= amb;
+// warm light bouncing off sunlit canyon walls into the shadows
+reflectedLight.indirectDiffuse += diffuseColor.rgb * uBounce * (1.0 - skyVis) * 0.25 * (1.0 - sunVis * 0.5);
+if (uDebug > 0.5) { reflectedLight.directDiffuse = vec3(0.0); reflectedLight.directSpecular = vec3(0.0); reflectedLight.indirectSpecular = vec3(0.0); reflectedLight.indirectDiffuse = diffuseColor.rgb; }
 `;
 
 export class Terrain {
@@ -243,6 +287,7 @@ export class Terrain {
     g.setAttribute('position', new THREE.BufferAttribute(m.pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(m.nor, 3));
     g.setAttribute('masks', new THREE.BufferAttribute(m.msk, 4, true));
+    g.setAttribute('light', new THREE.BufferAttribute(m.lit, 2, true));
     g.setIndex(this.index);
     const mesh = new THREE.Mesh(g, this.material);
     mesh.position.set(rec.x + rec.size / 2, 0, rec.z + rec.size / 2);
@@ -250,6 +295,7 @@ export class Terrain {
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     mesh.receiveShadow = true;
+    mesh.layers.enable(1);
     rec.mesh = mesh;
     rec.state = 'ready';
     this.group.add(mesh);

@@ -23,15 +23,12 @@ html, body {
 button { font: inherit; color: inherit; }
 
 /* ---------- menu ---------- */
-#menu { flex-direction: column; align-items: center; justify-content: center; padding: max(12px, var(--safe-t)) calc(16px + var(--safe-r)) max(10px, var(--safe-b)) calc(16px + var(--safe-l)); gap: 2vh; overflow-y: auto; }
-.menu-bg { position: absolute; inset: 0; z-index: -1;
-  background: radial-gradient(ellipse at 50% 120%, #f0b27a 0%, #b56a58 22%, #3b3e5a 55%, #0d1320 100%);
-}
-.menu-bg::after { content: ''; position: absolute; inset: 0; background: url('../assets/hdri/coast_sky.jpg') center 38% / cover; opacity: 0.35; mix-blend-mode: screen; }
+#menu { flex-direction: column; align-items: center; justify-content: flex-start; padding: max(12px, var(--safe-t)) calc(16px + var(--safe-r)) max(10px, var(--safe-b)) calc(16px + var(--safe-l)); gap: 2vh; overflow-y: auto; }
+.menu-bg { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(5,8,14,0.55) 0%, rgba(5,8,14,0.05) 35%, rgba(5,8,14,0.1) 60%, rgba(5,8,14,0.6) 100%); }
 .brand { text-align: center; }
 .brand h1 { font-family: 'Cormorant Garamond', serif; font-weight: 300; letter-spacing: 0.55em; margin: 0 0 0 0.55em; font-size: clamp(34px, 8vh, 72px); }
 .brand p { margin: 0; color: var(--ink-dim); letter-spacing: 0.25em; text-transform: uppercase; font-size: clamp(9px, 1.7vh, 12px); }
-.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.4vw; width: min(1100px, 100%); }
+.cards { margin-top: auto; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.4vw; width: min(1100px, 100%); }
 .card { background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 0; text-align: left; cursor: pointer; overflow: hidden;
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s; display: flex; flex-direction: column; }
 .card:hover, .card:focus-visible { transform: translateY(-4px); border-color: rgba(255, 255, 255, 0.45); background: rgba(20, 26, 32, 0.5); outline: none; }

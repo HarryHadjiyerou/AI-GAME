@@ -18,6 +18,31 @@ export class Post {
     this.rtScene = new THREE.WebGLRenderTarget(4, 4, { type, samples, depthBuffer: true });
     this.rtA = new THREE.WebGLRenderTarget(4, 4, { type });
     this.rtB = new THREE.WebGLRenderTarget(4, 4, { type });
+    this.rtRays = new THREE.WebGLRenderTarget(4, 4, { type });
+    // God rays: march from each pixel towards the sun through the bright-pass buffer.
+    this.raysMat = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, uSun: { value: new THREE.Vector2(0.5, 0.5) }, uAspect: { value: 1 } },
+      vertexShader: QUAD_VS,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tSrc; uniform vec2 uSun; uniform float uAspect; varying vec2 vUv;
+        void main() {
+          vec2 d = (uSun - vUv) / 28.0;
+          vec2 uv = vUv;
+          float decay = 1.0;
+          vec3 acc = vec3(0.0);
+          for (int i = 0; i < 28; i++) {
+            uv += d;
+            vec3 c = texture2D(tSrc, clamp(uv, 0.0, 1.0)).rgb;
+            acc += max(c - vec3(0.8), vec3(0.0)) * decay;
+            decay *= 0.94;
+          }
+          vec2 dd = (vUv - uSun) * vec2(uAspect, 1.0);
+          float fall = exp(-dot(dd, dd) * 2.5);
+          gl_FragColor = vec4(acc / 28.0 * fall, 1.0);
+        }`,
+      depthTest: false, depthWrite: false,
+    });
+    this.rays = { strength: 0, sun: new THREE.Vector2() };
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quad.frustumCulled = false;
     this.qScene = new THREE.Scene();
@@ -25,7 +50,7 @@ export class Post {
     this.qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
     this.brightMat = new THREE.ShaderMaterial({
-      uniforms: { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uThreshold: { value: 1.1 } },
+      uniforms: { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uThreshold: { value: 1.5 } },
       vertexShader: QUAD_VS,
       fragmentShader: /* glsl */ `
         uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uThreshold; varying vec2 vUv;
@@ -59,12 +84,15 @@ export class Post {
         uExposure: { value: 1 }, uSat: { value: 1.15 }, uContrast: { value: 1.05 },
         uUnder: { value: 0 }, uUnderColor: { value: new THREE.Color(0.05, 0.25, 0.3) },
         uCloud: { value: 0 }, uCloudColor: { value: new THREE.Color(0.9, 0.92, 0.95) },
-        uFlash: { value: 0 }, uDamage: { value: 0 }, uTime: { value: 0 }, uBloom: { value: 0.35 },
+        uFlash: { value: 0 }, uDamage: { value: 0 }, uTime: { value: 0 }, uBloom: { value: 0.28 },
         uTint: { value: new THREE.Color(1, 1, 1) }, uLdr: { value: this.hdr ? 0 : 1 },
+        tRays: { value: null }, uRays: { value: 0 }, uRayColor: { value: new THREE.Color(1, 0.9, 0.75) },
       },
       vertexShader: QUAD_VS,
       fragmentShader: /* glsl */ `
-        uniform sampler2D tScene, tBloom;
+        uniform sampler2D tScene, tBloom, tRays;
+        uniform float uRays;
+        uniform vec3 uRayColor;
         uniform float uAspect, uFish, uSpeed, uBlur, uExposure, uSat, uContrast, uUnder, uCloud, uFlash, uDamage, uTime, uBloom, uLdr;
         uniform vec3 uUnderColor, uCloudColor, uTint;
         varying vec2 vUv;
@@ -108,6 +136,7 @@ export class Post {
           }
           col /= wsum;
           col += texture2D(tBloom, suv).rgb * uBloom;
+          col += texture2D(tRays, suv).rgb * uRays * uRayColor;
           col *= uTint;
           // Clouds and underwater murk
           col = mix(col, uCloudColor, uCloud * 0.85);
@@ -135,6 +164,8 @@ export class Post {
     const bw = Math.max(2, W >> 2), bh = Math.max(2, H >> 2);
     this.rtA.setSize(bw, bh);
     this.rtB.setSize(bw, bh);
+    this.rtRays.setSize(bw, bh);
+    this.raysMat.uniforms.uAspect.value = w / h;
     this.brightMat.uniforms.uTexel.value.set(1 / W, 1 / H);
     this.params.uAspect.value = w / h;
     this.bw = bw; this.bh = bh;
@@ -165,6 +196,14 @@ export class Post {
     this.blurMat.uniforms.tSrc.value = this.rtB.texture;
     this.blurMat.uniforms.uDir.value.set(0, 1 / this.bh);
     this.pass(this.blurMat, this.rtA);
+    // god rays from the bright pass
+    if (this.rays.strength > 0.01) {
+      this.raysMat.uniforms.tSrc.value = this.rtA.texture;
+      this.raysMat.uniforms.uSun.value.copy(this.rays.sun);
+      this.pass(this.raysMat, this.rtRays);
+    }
+    this.params.uRays.value = this.rays.strength;
+    this.params.tRays.value = this.rtRays.texture;
     this.params.tScene.value = this.rtScene.texture;
     this.params.tBloom.value = this.rtA.texture;
     this.pass(this.finalMat, null);

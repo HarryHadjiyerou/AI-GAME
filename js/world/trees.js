@@ -53,7 +53,7 @@ function needleTexture() {
   return t;
 }
 
-function leafTexture() {
+export function leafTexture() {
   const S = 256, c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d');
@@ -169,7 +169,7 @@ export class Trees {
     this.types = SPECS.map((s) => {
       const tg = trunkGeometry(...s.trunk);
       const fg = s.broad ? broadleafFoliage(9) : coniferFoliage(s.foliage);
-      const tm = patchMaterial(new THREE.MeshStandardMaterial({ map: bark, normalMap: barkN, color: s.bark, roughness: 0.95 }), null, 'trunk');
+      const tm = patchMaterial(new THREE.MeshStandardMaterial({ map: bark, normalMap: barkN, color: new THREE.Color(s.bark).multiplyScalar(2.4), roughness: 0.95 }), null, 'trunk');
       const fm = new THREE.MeshStandardMaterial({ map: s.broad ? leaves : needles, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.85, color: new THREE.Color(s.leaf).multiply(this.leafTint) });
       patchMaterial(fm, (sh) => {
         sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -189,6 +189,7 @@ export class Trees {
       for (const m of [trunk, fol]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); }
       fol.castShadow = trunk.castShadow = quality === 'high';
       fol.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
+      trunk.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
       return { spec: s, trunk, fol, tg, fg, tm, fm };
     });
     this.bakeImpostors(renderer, assets);
@@ -245,7 +246,7 @@ export class Trees {
     geo.setAttribute('position', base.attributes.position);
     geo.setAttribute('uv', base.attributes.uv);
     this.impPos = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4); // x,y,z,height
-    this.impData = new THREE.InstancedBufferAttribute(new Float32Array(max * 2), 2); // type, tint
+    this.impData = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4); // type, tint, shadow, sky
     geo.setAttribute('iPos', this.impPos);
     geo.setAttribute('iData', this.impData);
     geo.instanceCount = 0;
@@ -256,9 +257,10 @@ export class Trees {
       vertexShader: /* glsl */ `
         ${CURVE_VERT_PARS}
         attribute vec4 iPos;
-        attribute vec2 iData;
+        attribute vec4 iData;
         varying vec2 vUv;
         varying float vTop, vTint;
+        varying vec2 vLit;
         const float W[4] = float[4](${widths.map((w) => w.toFixed(3)).join(',')});
         void main() {
           int ty = int(iData.x + 0.5);
@@ -277,6 +279,7 @@ export class Trees {
           vFogWorld = p;
           vUv = vec2((float(ty) + uv.x) * 0.25, uv.y);
           vTint = iData.y;
+          vLit = iData.zw;
           gl_Position = projectionMatrix * viewMatrix * curveWorld(vec4(p, 1.0));
         }`,
       fragmentShader: /* glsl */ `
@@ -285,6 +288,7 @@ export class Trees {
         uniform vec3 uSunColor;
         varying vec2 vUv;
         varying float vTop, vTint;
+        varying vec2 vLit;
         void main() {
           vec2 sideUv = vec2(vUv.x, 0.5 + vUv.y * 0.5);
           vec2 topUv = vec2(vUv.x, 0.125 + vUv.y * 0.25);
@@ -292,12 +296,13 @@ export class Trees {
           vec4 t = texture2D(tImp, topUv);
           vec4 c = mix(s, t, vTop);
           if (c.a < 0.5) discard;
-          vec3 col = c.rgb / max(c.a, 0.001) * (0.85 + 0.3 * vTint) * (0.55 + 0.5 * max(uSunDir.y, 0.0)) * uSunColor;
+          vec3 col = c.rgb / max(c.a, 0.001) * (0.85 + 0.3 * vTint) * (0.55 + 0.5 * max(uSunDir.y, 0.0)) * uSunColor * (0.2 + 0.8 * (0.62 * vLit.x + 0.38 * vLit.y));
           gl_FragColor = vec4(applyFog(col, vFogWorld), 1.0);
         }`,
     });
     this.impMesh = new THREE.Mesh(geo, mat);
     this.impMesh.frustumCulled = false;
+    this.impMesh.layers.enable(1);
     this.scene.add(this.impMesh);
   }
 
@@ -348,7 +353,7 @@ export class Trees {
       const t = this.tiles.get(this.tileKey(i, j));
       if (!t || !t.data) continue;
       const d = t.data;
-      for (let k = 0; k < d.length; k += 6) fn(d[k], d[k + 1], d[k + 2], d[k + 3], d[k + 4], d[k + 5]);
+      for (let k = 0; k < d.length; k += 8) fn(d[k], d[k + 1], d[k + 2], d[k + 3], d[k + 4], d[k + 5], d[k + 6], d[k + 7]);
     }
   }
 
@@ -360,7 +365,7 @@ export class Trees {
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
     const up = new THREE.Vector3(0, 1, 0);
     const r2 = this.r3d * this.r3d;
-    this.forEachTree(cam.x, cam.z, this.r3d, (x, y, z, s, rot, type) => {
+    this.forEachTree(cam.x, cam.z, this.r3d, (x, y, z, s, rot, type, sh, sk) => {
       const dx = x - cam.x, dz = z - cam.z;
       if (dx * dx + dz * dz > r2) return;
       const T = this.types[type];
@@ -373,15 +378,18 @@ export class Trees {
       m4.compose(p, q, sc);
       T.trunk.setMatrixAt(c, m4);
       T.fol.setMatrixAt(c, m4);
-      const v = 0.8 + (rot * 1.7 % 1) * 0.4;
+      // baked terrain shadow / sky visibility darkens trees in canyons and mountain shadows
+      const v = (0.8 + (rot * 1.7 % 1) * 0.4) * (0.22 + 0.78 * (0.62 * sh + 0.38 * sk));
       col.setRGB(v * (0.95 + s * 0.1), v, v * (0.9 + (1 - s) * 0.15));
+      T.trunk.setColorAt(c, col);
       T.fol.setColorAt(c, col);
       counts[type]++;
     });
     this.types.forEach((T, i) => {
       T.trunk.count = T.fol.count = counts[i];
       T.trunk.instanceMatrix.needsUpdate = T.fol.instanceMatrix.needsUpdate = true;
-      if (T.fol.instanceColor) T.fol.instanceColor.needsUpdate = true;
+      T.fol.instanceColor.needsUpdate = true;
+      T.trunk.instanceColor.needsUpdate = true;
     });
   }
 
@@ -389,13 +397,13 @@ export class Trees {
     const P = this.impPos.array, D = this.impData.array;
     let n = 0;
     const r3 = this.r3d * this.r3d, ri = this.rImp * this.rImp;
-    this.forEachTree(cam.x, cam.z, this.rImp, (x, y, z, s, rot, type) => {
+    this.forEachTree(cam.x, cam.z, this.rImp, (x, y, z, s, rot, type, sh, sk) => {
       const dx = x - cam.x, dz = z - cam.z, d2 = dx * dx + dz * dz;
       if (d2 <= r3 || d2 > ri || n >= this.impMax) return;
       // thin out far away, keeping the tall ones
       if (d2 > ri * 0.35 && (rot * 3.1) % 1 > 0.55 + s * 0.4) return;
       P[n * 4] = x; P[n * 4 + 1] = y - 0.5; P[n * 4 + 2] = z; P[n * 4 + 3] = this.treeHeight(type, s);
-      D[n * 2] = type; D[n * 2 + 1] = (rot * 1.7) % 1;
+      D[n * 4] = type; D[n * 4 + 1] = (rot * 1.7) % 1; D[n * 4 + 2] = sh; D[n * 4 + 3] = sk;
       n++;
     });
     this.impMesh.geometry.instanceCount = n;

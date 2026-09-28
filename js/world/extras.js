@@ -51,29 +51,33 @@ export class Flocks {
     this.birds = [];
     this.group = new THREE.Group();
     scene.add(this.group);
-    const pick = { forest: 'stork', coast: 'stork', mountains: 'stork', city: 'parrot' }[biome.id];
+    let pick = { forest: 'hawk_lo', coast: 'stork', mountains: 'stork', city: 'parrot' }[biome.id];
+    if (!assets.models[pick]) pick = 'stork';
     const src = assets.models[pick];
+    this.rigid = pick === 'hawk_lo'; // the hawk scan is a static soaring pose
     if (!src) return;
     const tint = { forest: 0x5a4030, coast: 0xffffff, mountains: 0x222222, city: 0x8890a0 }[biome.id];
-    const span = { forest: 1.6, coast: 1.3, mountains: 3.0, city: 0.7 }[biome.id];
+    const span = { forest: 3.0, coast: 1.3, mountains: 3.0, city: 0.7 }[biome.id];
     const box = new THREE.Box3().setFromObject(src.scene);
     const size = box.getSize(new THREE.Vector3());
     const scale = span / Math.max(size.x, size.z);
-    const count = { forest: 14, coast: 22, mountains: 12, city: 26 }[biome.id];
+    const count = { forest: 12, coast: 22, mountains: 12, city: 26 }[biome.id];
     this.clip = src.animations[0];
     for (let i = 0; i < count; i++) {
       const o = skeletonClone(src.scene);
       o.traverse((m) => {
-        if (m.isMesh) {
+        if (m.isMesh && !this.rigid) {
           m.material = m.material.clone();
           m.material.color = new THREE.Color(tint);
+          m.frustumCulled = false;
+        } else if (m.isMesh) {
           m.frustumCulled = false;
         }
       });
       patchObject(o);
       o.scale.setScalar(scale);
       const mixer = new THREE.AnimationMixer(o);
-      if (this.clip) { const a = mixer.clipAction(this.clip); a.play(); a.time = Math.random() * this.clip.duration; a.timeScale = 0.8 + Math.random() * 0.5; }
+      if (this.clip && !this.rigid) { const a = mixer.clipAction(this.clip); a.play(); a.time = Math.random() * this.clip.duration; a.timeScale = 0.8 + Math.random() * 0.5; }
       this.group.add(o);
       this.birds.push({ o, mixer, flock: Math.floor(i / 4), phase: Math.random() * Math.PI * 2, r: 30 + Math.random() * 50, hOff: Math.random() * 60, speed: 0.25 + Math.random() * 0.2 });
     }
@@ -104,7 +108,8 @@ export class Flocks {
       const x = c[0] + Math.cos(b.phase) * b.r, z = c[1] + Math.sin(b.phase) * b.r;
       const y = baseH + b.hOff + ((t * 3 + b.phase * 10) % 400) * (this.biome.id === 'city' ? 0 : 0.5) + Math.sin(t * 0.5 + b.phase) * 4;
       b.o.position.set(x, y, z);
-      b.o.rotation.set(0, -b.phase + Math.PI, 0.35);
+      if (this.rigid) { b.o.rotation.set(0, -b.phase, 0, 'YXZ'); b.o.rotation.z = -0.4 + Math.sin(t * 0.7 + b.phase) * 0.08; }
+      else b.o.rotation.set(0, -b.phase + Math.PI, 0.35);
       b.mixer.update(dt);
     }
   }

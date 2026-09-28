@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#9bc}</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.js","three/addons/":"../vendor/three/examples/jsm/"}}</script></head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0x99bbcc);
+s.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(1, 2, 1); s.add(d);
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 100);
+const views = { top: [0, 3, 0.001], front: [0, 0, 3], side: [3, 0, 0], persp: [2, 1.5, 2], under: [0, -3, 0.001] };
+cam.position.set(...views[q.get('v') || 'persp']); cam.lookAt(0, 0, 0);
+new GLTFLoader().load(q.get('f') || '_hawk_src.glb', (g) => { s.add(g.scene); if (q.get('flat')) g.scene.traverse(o => { if (o.material) { o.material.emissiveIntensity = +q.get('flat'); } }); r.render(s, cam); window.done = true; });
+</script></body></html>

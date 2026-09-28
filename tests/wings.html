@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { BIRDS } from '../js/flight/birds.js';
 import { Wings } from '../js/flight/wings.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const q = new URLSearchParams(location.search);
 const bird = q.get('bird') || 'hawk';
 const view = q.get('view') || 'fp';
@@ -14,7 +15,8 @@ const r = new THREE.WebGLRenderer({ antialias: true });
 r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
 r.setClearColor(0x8ab4d8);
 const cfg = BIRDS[bird];
-const w = new Wings(cfg, null);
+const glb = q.get('glb') ? await new GLTFLoader().loadAsync('../assets/models/hawk_hi.glb') : null;
+const w = new Wings(cfg, null, glb);
 w.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const grid = new THREE.GridHelper(4, 20); grid.position.y = -0.5; w.scene.add(grid);
 const cam = new THREE.PerspectiveCamera(view === 'fp' ? cfg.cam.fov : 45, innerWidth / innerHeight, 0.01, 100);

@@ -4,12 +4,12 @@ A first-person bird flight game for the browser (built for iPhone in landscape, 
 
 | Bird | World | How it flies |
 |---|---|---|
-| Hawk | Forest: redwoods, rivers, waterfalls, valley mist | Fast, strong tucked dive, quick to manoeuvre |
-| Seagull | Coast: cliffs, islands, sea stacks, boats, a lighthouse, a storm offshore | Long glides, strong wind and ridge lift, can plunge into the sea |
-| Condor | Mountains: snow peaks, frozen lakes, a sea of cloud | Slow wingbeats, very long glides, big thermals, wide turns |
+| Hawk | The Wilds: lowland redwood forests and rivers, 1 km-high red-rock tablelands cut by canyons down to river level (oases, waterfalls, slot canyons), 7 km mountain ranges piercing a cloud layer, and titan trees 150–380 m tall | Fast, strong tucked dive, quick to manoeuvre |
+| Seagull | Coast: 140–400 m sea cliffs, islands, sea stacks, boats, a lighthouse, a storm offshore | Long glides, strong wind and ridge lift, can plunge into the sea |
+| Condor | Mountains: peaks to ~6 km above a sea of cloud, frozen lakes | Slow wingbeats, very long glides, big thermals, wide turns |
 | Pigeon | City: towers, a river with bridges, construction frames and cranes, traffic | Very agile, quick bursts, low height ceiling |
 
-All four are playable in V1. The hawk and forest got the most tuning.
+All four are playable. The hawk and The Wilds got the most work.
 
 ## Run it
 
@@ -48,24 +48,26 @@ js/flight/
   birds.js                     per-bird numbers → aerodynamic coefficients
   physics.js                   lift (angle of attack), parasitic + induced drag, gravity, flapping, tuck, auto-trim
   head.js                      bird-eye camera: head stabilisation, glances, twitches, flap bob, speed FOV
-  wings.js                     procedural feathered wings (3-bone arm driving ~60 feather quads per wing)
+  wings.js                     hawk: wings cut from the photogrammetry scan, bent in a vertex shader; other birds: procedural feather rig
   input.js                     virtual joystick + buttons, keyboard, gamepad
 js/world/
   fields.js                    procedural height/mask functions per biome (shared by main thread and worker)
-  terrainWorker.js             builds terrain chunks, tree tiles and height maps off the main thread
+  terrainWorker.js             builds terrain chunks, tree tiles, height/light maps off the main thread (incl. baked ray-marched lighting)
   terrain.js                   quadtree LOD streaming + splat shader (Poly Haven textures, cliffs, snow, city streets)
-  water.js                     Gerstner waves, sky reflections, depth colour, shore foam, frozen lakes
+  water.js                     Gerstner waves, planar scene reflections, depth colour, shore foam, frozen lakes
   sky.js / clouds.js           HDRI sky dome, lit billboard cumulus, cloud deck, storm cell
   trees.js                     instanced procedural trees + impostors baked at runtime for distance
+  titans.js                    titan trees with branch geometry, capsule/sphere collision
   city.js                      towers with shader-drawn windows, bridges, frames, cranes, billboards, shader-driven traffic
   extras.js                    thermals, GLB bird flocks, particles, boats, lighthouse, lightning, waterfalls
 js/core/
   shaderPatch.js               "mini planet" curvature + height fog injected into every material
-  post.js                      HDR pipeline: bloom, fisheye, peripheral/speed blur, chromatic aberration, ACES, grading
+  post.js                      HDR pipeline: bloom, god rays, fisheye, peripheral/speed blur, chromatic aberration, ACES, grading
   assets.js / audio.js / workers.js
 ```
 
-- **Mini planet:** every vertex is lowered by `d²/2R` relative to the camera, so the horizon curves. When you climb, the sky's horizon dips to match. R is 18 to 34 km depending on the biome.
+- **Mini planet:** every vertex is lowered by `d²/2R` relative to the camera, so the horizon curves. When you climb, the sky's horizon dips to match. R is 30 to 120 km depending on the biome (large enough that 7 km peaks stay visible from 30 km away).
+- **"Ray-traced" lighting (what it actually is):** WebGL on a phone can't do hardware ray tracing, so the look is built from cheaper techniques. The terrain worker ray-marches the height field from every terrain point towards the sun (soft shadows cast by mountains and canyon rims across kilometres) and around the horizon (sky visibility, so canyon floors really go dark). The result is baked into each terrain chunk, tree and titan as it streams in. Water uses a real planar reflection render of the scene. Post-processing adds HDR bloom and screen-space god rays. Depth uses a reversed-Z buffer where supported, plus a near plane that moves with altitude, for 50 km views.
 - **Flight model:** see the notes at the top of `physics.js`. `node tests/flight-sim.mjs` runs the model without a browser and prints, for each bird, glide speed and glide ratio, top dive speed wings tucked vs open, climb rate while flapping, boost speed, take-off, and turning.
 
   Current results:
@@ -78,7 +80,7 @@ js/core/
   | Pigeon | 7:1 | | |
 
   The pigeon can't hold its tightest turn without flapping, which is deliberate.
-- **Quality:** Auto chooses Medium on phones and High on desktop. High adds sun shadows and 4× MSAA. Resolution also scales itself up and down to keep the frame rate steady.
+- **Quality:** Auto chooses Medium on phones and High on desktop. High adds real-time sun shadows, 4× MSAA, full-rate half-resolution reflections and longer view/tree/titan distances. Medium renders reflections at one-third resolution every other frame. Low turns reflections off. Resolution also scales itself up and down to keep the frame rate steady.
 
 ## Third-party assets
 
@@ -89,15 +91,17 @@ The download and conversion script is `tools/fetch-assets.mjs`, so every downloa
 | HDRI skies: `rustig_koppie_puresky` (forest), `table_mountain_1_puresky` (coast), `kloofendal_48d_partly_cloudy_puresky` (mountains), `industrial_sunset_02_puresky` (city) | [Poly Haven](https://polyhaven.com) | CC0 |
 | PBR textures: `aerial_grass_rock`, `forest_leaves_04`, `rocky_terrain_02`, `aerial_rocks_02`, `snow_field_aerial`, `aerial_beach_01`, `knotted_pine_bark`, `aerial_asphalt_01` | Poly Haven | CC0 |
 | `waternormals.jpg` | three.js examples | MIT (three.js repo) |
-| `stork.glb`, `flamingo.glb`, `parrot.glb` (used for ambient flocks) | three.js examples (originally from the RO.ME project) | They ship in the MIT-licensed three.js repo, but I have **not verified** separate licence terms for the models. Replace them before any commercial release. |
+| **Hawk In Full Wingspan** by [restore50](https://sketchfab.com/restore50) — [Sketchfab](https://sketchfab.com/3d-models/hawk-in-full-wingspan-160aa78ceba04adeb0794266cd74257c) (supplied by you). Optimised by `tools/optimize-hawk.mjs` into `hawk_hi.glb` (88k tris, first-person wings) and `hawk_lo.glb` (13k tris, soaring hawks + menu) | Sketchfab | CC-BY-4.0: attribution required (this line) |
+| `stork.glb`, `parrot.glb` (ambient flocks on the coast, mountains and city) | three.js examples (originally from the RO.ME project) | They ship in the MIT-licensed three.js repo, but I have **not verified** separate licence terms for the models. Replace them before any commercial release. |
 | three.js r186 (vendored in `vendor/three`) | [three.js](https://threejs.org) | MIT |
 
 The Poly Haven HDRIs load in two forms. A 1k `.hdr` provides image-based lighting and the sun direction and colour. A 4k tonemapped JPG provides the visible sky.
 
 ## Known limitations of V1
 
-- **Not tested on a real iPhone.** All testing so far used headless Chromium with software WebGL: screenshots of every biome, scripted landing, take-off and plunge checks, and touch emulation at 844×390. At the spawn point on Medium, one frame measured about 185 draw calls in the forest, 200 at the coast, 100 in the mountains and 385 in the city (0.75–1.9 million triangles). Real device frame rate is unmeasured.
-- **Wings are procedural, not GLB.** The free bird GLBs I found are low-poly, animated with morph targets, and can't be posed as a wing seen up close from the eye. The feather rig is procedural so gliding, flapping, tucking and banking poses can be driven directly.
-- **Trees are procedural.** Poly Haven's tree models are 2–17 million polygons each, far too heavy to draw in real time on a phone. They're replaced with instanced branch-card trees plus impostors baked when the game loads. Quaternius and Kenney packs weren't used because their low-poly style clashes with the photoreal look, and I didn't verify their download routes.
+- **Not tested on a real iPhone.** All testing so far used headless Chromium with software WebGL: screenshots of every biome, scripted landing, take-off and plunge checks, and touch emulation at 844×390. At the spawn point on Medium, one frame measured about 200 draw calls in The Wilds, 215 at the coast, 130 in the mountains and 400 in the city (1–2.3 million triangles), not counting the reflection pass. The bigger world, titans, baked lighting and reflections all cost more than V1. Real device frame rate is unmeasured, and Low quality may be needed on older iPhones.
+- **Wings:** the hawk uses the real scan. It has no skeleton, so flapping and folding are approximated by bending the wing geometry in a shader (outer wing lags, fold sweeps back); it won't match a properly rigged wing up close. The seagull, condor and pigeon still use the procedural feather rig.
+- **Trees are procedural.** Poly Haven's tree models are 2–17 million polygons each, far too heavy to draw in real time on a phone. They're replaced with instanced branch-card trees plus impostors baked when the game loads. The titan trees are procedural too. Their leaf clumps still look somewhat stylised up close.
 - **Fog and clouds are approximations.** The "volumetric" fog is analytic height fog with sun in-scattering, not raymarched. Clouds are lit billboards plus a cloud-deck shader, not volumetric.
+- **Mountain faces** can look streaky ("curtain" shading) at distance where the height-field grid is coarse on very steep slopes.
 - **Physics shortcuts.** Rivers and lakes all sit at one water level. Underwater diving is faked (tint, buoyancy, a random fish). Collisions use the height field, tree cylinders and cones, and building boxes.

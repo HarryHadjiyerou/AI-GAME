@@ -6,7 +6,7 @@ import { mulberry32 } from './noise.js';
 
 const TEX_NAMES = ['grass', 'forestfloor', 'rock', 'cliff', 'snow', 'sand', 'bark', 'asphalt'];
 
-export async function loadAssets(renderer, biome, onProgress) {
+export async function loadAssets(renderer, biome, onProgress, birdId) {
   const manager = new THREE.LoadingManager();
   manager.onProgress = (url, loaded, total) => onProgress?.(loaded / total);
   const texLoader = new THREE.TextureLoader(manager);
@@ -40,7 +40,9 @@ export async function loadAssets(renderer, biome, onProgress) {
     sky = t;
   }));
   const models = {};
-  for (const m of ['stork', 'flamingo', 'parrot']) {
+  const modelList = ['stork', 'parrot', 'hawk_lo'];
+  if (birdId === 'hawk') modelList.push('hawk_hi');
+  for (const m of modelList) {
     jobs.push(gltfLoader.loadAsync(`assets/models/${m}.glb`).then((g) => { models[m] = g; }).catch((e) => console.warn('model failed', m, e)));
   }
   await Promise.all(jobs);

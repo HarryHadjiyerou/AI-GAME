@@ -1,6 +1,7 @@
 // Water surface: Gerstner waves, sky reflections, depth-based colour and shore foam.
 import * as THREE from 'three';
 import { G, CURVE_VERT_PARS, FOG_FRAG_PARS } from '../core/shaderPatch.js';
+import { hdrType } from '../core/post.js';
 
 // Shared wave set (xz direction, wavelength, amplitude). Mirrored in JS for physics.
 export const WAVES = [
@@ -31,7 +32,7 @@ export class Water {
     const g = new THREE.PlaneGeometry(2, 2, seg, seg);
     g.rotateX(-Math.PI / 2);
     const p = g.attributes.position;
-    const a = 200, R = 26000;
+    const a = 200, R = 70000;
     for (let i = 0; i < p.count; i++) {
       const u = p.getX(i), v = p.getZ(i);
       p.setX(i, u * a + Math.sign(u) * Math.pow(Math.abs(u), 3) * (R - a));
@@ -49,6 +50,7 @@ export class Water {
       tSky: { value: assets.sky },
       tNoise: { value: assets.tex.noise },
       tHeight: { value: hmTex },
+      tLight: { value: new THREE.DataTexture(new Uint8Array([255, 255, 0, 255]), 1, 1) },
       uHm: { value: new THREE.Vector4(0, 0, 1, 0) },
       uWave: { value: W.wave },
       uDeep: { value: new THREE.Color(W.deep) },
@@ -59,6 +61,9 @@ export class Water {
       uSkyBoost: { value: biome.skyBoost || 1 },
       uLevel: { value: 0 },
       uLightning: { value: 0 },
+      tRefl: { value: null },
+      uReflMat: { value: new THREE.Matrix4() },
+      uHasRefl: { value: 0 },
     };
     const waveGLSL = WAVES.map((w) => `wave(p, vec2(${w[0].toFixed(3)}, ${w[1].toFixed(3)}), ${w[2].toFixed(2)}, ${w[3].toFixed(3)} * amp, t, pos, tang, bin);`).join('\n');
 
@@ -74,6 +79,8 @@ export class Water {
         varying vec3 vN;
         varying float vDepth;
         varying float vCrest;
+        uniform mat4 uReflMat;
+        varying vec4 vRefl;
         void wave(vec2 p, vec2 d, float L, float A, float t, inout vec3 pos, inout vec3 tang, inout vec3 bin) {
           d = normalize(d);
           float k = 6.2831853 / L;
@@ -106,11 +113,15 @@ export class Water {
           vec4 cw = vec4(pos, 1.0);
           vFogWorld = cw.xyz;
           cw = curveWorld(cw);
+          vRefl = uReflMat * vec4(cw.xyz - vec3(0.0, pos.y - uLevel, 0.0), 1.0);
           gl_Position = projectionMatrix * viewMatrix * cw;
         }`,
       fragmentShader: /* glsl */ `
         ${FOG_FRAG_PARS}
-        uniform sampler2D tNormals, tSky, tNoise;
+        uniform sampler2D tNormals, tSky, tNoise, tLight, tRefl;
+        uniform vec4 uHm;
+        uniform float uHasRefl;
+        varying vec4 vRefl;
         uniform float uTime, uIce, uMurk, uSkyBoost, uWave, uLevel, uLightning;
         uniform vec3 uDeep, uShallow, uSunColor;
         uniform vec2 uFlow;
@@ -138,6 +149,8 @@ export class Water {
           if (below) N = -N;
           vec4 nz = texture2D(tNoise, wp.xz / 90.0 + uTime * 0.004);
           float depth = max(vDepth, 0.0);
+          vec2 luv = (wp.xz - uHm.xy) / uHm.z + 0.5;
+          vec2 lit = (luv.x > 0.0 && luv.x < 1.0 && luv.y > 0.0 && luv.y < 1.0) ? texture2D(tLight, luv).rg : vec2(1.0);
 
           if (uIce > 0.5) {
             // Frozen lake: rough blue-white ice with cracks and snow drifts.
@@ -161,13 +174,20 @@ export class Water {
           vec3 refl = skyLookup(R) * (1.0 + uLightning * 3.0);
           float l = dot(refl, vec3(0.2126, 0.7152, 0.0722));
           refl *= 1.0 + smoothstep(0.6, 1.0, l) * 1.5;
-          vec3 spec = uSunColor * (pow(max(dot(R, uSunDir), 0.0), 900.0) * 40.0 + pow(max(dot(R, uSunDir), 0.0), 80.0) * 0.6);
+          if (uHasRefl > 0.5 && !below) {
+            // planar reflection of the real scene (mountains, canyon walls, trees, clouds)
+            vec2 ruv = vRefl.xy / vRefl.w + N.xz * mix(0.035, 0.008, smoothstep(50.0, 2000.0, dist));
+            vec3 scene = texture2D(tRefl, clamp(ruv, 0.001, 0.999)).rgb;
+            refl = scene * (1.0 + uLightning * 3.0);
+          }
+          vec3 spec = uSunColor * (pow(max(dot(R, uSunDir), 0.0), 900.0) * 40.0 + pow(max(dot(R, uSunDir), 0.0), 80.0) * 0.6) * lit.x;
+          refl *= mix(0.2, 1.0, lit.y);
           float absorb = 1.0 - exp(-depth * mix(0.12, 0.5, uMurk));
           vec3 body = mix(uShallow, uDeep, absorb);
           // light scattering through wave crests
           float sss = pow(max(dot(V, -uSunDir) * 0.5 + 0.5, 0.0), 3.0) * clamp(vCrest, 0.0, 1.0);
           body += uShallow * sss * 0.6 * uSunColor;
-          body *= 0.35 + 0.65 * max(uSunDir.y, 0.1) + uLightning;
+          body *= (0.35 + 0.65 * max(uSunDir.y, 0.1)) * mix(0.25, 1.0, 0.5 * lit.x + 0.5 * lit.y) + uLightning;
           vec3 col = mix(body, refl, fr) + spec;
           // Foam: shoreline and wave crests
           float shore = 1.0 - smoothstep(0.0, 2.2 + uWave * 1.5, depth);
@@ -189,6 +209,50 @@ export class Water {
     this.level = 0;
   }
 
+  setupReflection(renderer, quality) {
+    if (quality === 'low') return;
+    this.refl = {
+      rt: new THREE.WebGLRenderTarget(4, 4, { type: hdrType(renderer) }),
+      cam: new THREE.PerspectiveCamera(),
+      scale: quality === 'high' ? 0.5 : 0.34,
+      plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.level + 0.5),
+      bias: new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1),
+      frame: 0,
+      every: quality === 'high' ? 1 : 2,
+    };
+    this.refl.cam.layers.set(1);
+    this.uniforms.tRefl.value = this.refl.rt.texture;
+  }
+
+  // Mirror the camera in the water plane and render the reflect-layer into a texture.
+  renderReflection(renderer, scene, camera, w, h) {
+    const R = this.refl;
+    if (!R) return;
+    if (camera.position.y - this.level > 9000) { this.uniforms.uHasRefl.value = 0; return; }
+    if (R.frame++ % R.every) return;
+    const W = Math.max(2, Math.floor(w * R.scale)), H = Math.max(2, Math.floor(h * R.scale));
+    if (R.rt.width !== W || R.rt.height !== H) R.rt.setSize(W, H);
+    const c = R.cam, L = this.level;
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const u = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+    c.position.set(camera.position.x, 2 * L - camera.position.y, camera.position.z);
+    f.y = -f.y; u.y = -u.y;
+    c.up.copy(u);
+    c.lookAt(c.position.clone().add(f));
+    c.projectionMatrix.copy(camera.projectionMatrix);
+    c.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+    c.updateMatrixWorld();
+    this.uniforms.uReflMat.value.copy(R.bias).multiply(c.projectionMatrix).multiply(c.matrixWorldInverse);
+    const prevClip = renderer.clippingPlanes;
+    renderer.clippingPlanes = [R.plane];
+    renderer.setRenderTarget(R.rt);
+    renderer.clear();
+    renderer.render(scene, c);
+    renderer.clippingPlanes = prevClip;
+    renderer.setRenderTarget(null);
+    this.uniforms.uHasRefl.value = 1;
+  }
+
   update(cam, t) {
     const s = 8;
     this.mesh.position.set(Math.round(cam.x / s) * s, 0, Math.round(cam.z / s) * s);
@@ -208,6 +272,11 @@ export class Water {
         this.uniforms.tHeight.value.dispose();
         this.uniforms.tHeight.value = tex;
         this.uniforms.uHm.value.set(m.cx, m.cz, m.size, 1);
+        const lt = new THREE.DataTexture(m.light, m.lres, m.lres);
+        lt.magFilter = lt.minFilter = THREE.LinearFilter;
+        lt.needsUpdate = true;
+        this.uniforms.tLight.value.dispose();
+        this.uniforms.tLight.value = lt;
       });
     }
   }

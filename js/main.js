@@ -5,6 +5,7 @@ import { Input } from './flight/input.js';
 import { Audio } from './core/audio.js';
 import { BIRDS } from './flight/birds.js';
 import { BIOMES } from './world/biomes.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = (s) => document.querySelector(s);
 const screens = ['menu', 'loading', 'hud', 'pause'];
@@ -21,7 +22,7 @@ window.addEventListener('unhandledrejection', (e) => fail(e.reason));
 const canvas = $('#gl');
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, reversedDepthBuffer: true });
 } catch (e) {
   fail(new Error('WebGL2 is not available on this device/browser.'));
 }
@@ -42,13 +43,57 @@ $('#optQuality').value = opts.quality || 'auto';
 $('#optInvert').checked = !!opts.invert;
 $('#optSound').checked = opts.sound !== false;
 $('#optVario').checked = opts.vario !== false;
-for (const id of ['optQuality', 'optInvert', 'optSound', 'optVario']) $('#' + id).addEventListener('change', () => {
-  opts.quality = $('#optQuality').value; opts.invert = $('#optInvert').checked; opts.sound = $('#optSound').checked; opts.vario = $('#optVario').checked;
+$('#optMusic').checked = opts.music !== false;
+for (const id of ['optQuality', 'optInvert', 'optSound', 'optVario', 'optMusic']) $('#' + id).addEventListener('change', () => {
+  opts.quality = $('#optQuality').value; opts.invert = $('#optInvert').checked; opts.sound = $('#optSound').checked; opts.vario = $('#optVario').checked; opts.music = $('#optMusic').checked;
   saveOpts();
+  applyAudioOpts();
 });
+
+// ---------- menu backdrop: the hawk scan gliding through a Poly Haven sky ----------
+const menu3d = { scene: new THREE.Scene(), cam: new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 5000), hawk: null, t: 0 };
+{
+  const tex = new THREE.TextureLoader().load('assets/hdri/mountains_sky.jpg');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  menu3d.scene.background = tex;
+  menu3d.scene.backgroundIntensity = 0.9;
+  menu3d.scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x6a5040, 1.6));
+  const sunL = new THREE.DirectionalLight(0xfff2dd, 3.2); sunL.position.set(3, 5, 2); menu3d.scene.add(sunL);
+  new GLTFLoader().load('assets/models/hawk_lo.glb', (g) => { menu3d.hawk = g.scene; menu3d.scene.add(g.scene); });
+  menu3d.cam.position.set(0, 0.35, 3.2);
+}
+function renderMenu(dt) {
+  menu3d.t += dt;
+  const t = menu3d.t, h = menu3d.hawk;
+  if (h) {
+    h.position.set(0.1 + Math.sin(t * 0.21) * 0.4, 0.82 + Math.sin(t * 0.5) * 0.06, 0.3);
+    h.rotation.set(0.12 + Math.sin(t * 0.37) * 0.05, Math.PI / 2 - 0.35 + Math.sin(t * 0.18) * 0.2, 0.55 + Math.sin(t * 0.3) * 0.15, 'YXZ');
+  }
+  menu3d.cam.aspect = innerWidth / innerHeight;
+  menu3d.cam.rotation.set(0, Math.sin(t * 0.05) * 0.15, 0);
+  menu3d.cam.updateProjectionMatrix();
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight, false);
+  renderer.setRenderTarget(null);
+  renderer.render(menu3d.scene, menu3d.cam);
+  renderer.toneMapping = THREE.NoToneMapping;
+}
 
 const input = new Input(document.body);
 const audio = new Audio();
+function applyAudioOpts() {
+  audio.enabled = opts.sound !== false;
+  audio.vario = opts.vario !== false;
+  const m = opts.music !== false;
+  if (audio.musicOn !== m) { audio.musicOn = m; const k = audio.musicKey; audio.musicKey = null; if (audio.ctx && k) audio.playMusic(k); }
+}
+applyAudioOpts();
+// Browsers (iOS especially) only allow audio after a user gesture: start the menu score on the first touch.
+const firstGesture = () => { audio.unlock(); if (!game) audio.playMusic('menu'); window.removeEventListener('pointerdown', firstGesture); window.removeEventListener('keydown', firstGesture); };
+window.addEventListener('pointerdown', firstGesture);
+window.addEventListener('keydown', firstGesture);
 let game = null;
 
 // ---------- HUD helpers ----------
@@ -89,8 +134,7 @@ async function startGame(bird) {
   const cfg = BIRDS[bird];
   const q = opts.quality && opts.quality !== 'auto' ? opts.quality : autoQuality();
   input.invert = !!opts.invert;
-  audio.enabled = opts.sound !== false;
-  audio.vario = opts.vario !== false;
+  applyAudioOpts();
   audio.start(cfg.biome);
   $('#loadTitle').textContent = BIOMES[cfg.biome].title;
   $('#loadBar').style.width = '0%';
@@ -118,7 +162,9 @@ input.onPause = () => pause(!game?.paused);
 $('#btnResume').addEventListener('click', () => pause(false));
 $('#btnMenu').addEventListener('click', () => {
   if (game) { game.dispose(); game = null; }
-  audio.ctx?.suspend();
+  audio.stopGame();
+  audio.ctx?.resume();
+  audio.playMusic('menu');
   show('menu');
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(true); });
@@ -130,10 +176,13 @@ $('#rotate').classList.add('armed');
 const deep = location.hash.slice(1);
 if (BIRDS[deep]) startGame(deep).catch(fail);
 
+let lastT = performance.now();
 renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
   if (game && game.running) {
     try { game.frame(); } catch (e) { game.running = false; fail(e); }
-  }
+  } else if ($('#menu').classList.contains('visible')) renderMenu(dt);
 });
 
 // expose for debugging

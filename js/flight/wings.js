@@ -79,8 +79,36 @@ function featherGeometry() {
   return g;
 }
 
+// Real hawk wings from the photogrammetry scan (restore50, CC-BY-4.0). The body is cut away and the
+// two wings are bent in the vertex shader: fold sweeps them back, flap rotates them about the shoulder
+// with the outer wing lagging so the wing curves like a real stroke.
+const BEND_GLSL = /* glsl */ `
+uniform float uFlap, uFold, uHand;
+uniform vec4 uPivot; // x: shoulder offset, y/z: pivot, w: half span
+vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(v.x * c + v.z * s, v.y, -v.x * s + v.z * c); }
+vec3 rotZ(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(v.x * c - v.y * s, v.x * s + v.y * c, v.z); }
+void bendWing(inout vec3 p, inout vec3 n) {
+  float sd = p.x < 0.0 ? -1.0 : 1.0;
+  float r = clamp((abs(p.x) - uPivot.x) / (uPivot.w - uPivot.x), 0.0, 1.0);
+  vec3 piv = vec3(sd * uPivot.x, uPivot.y, uPivot.z);
+  vec3 q = p - piv;
+  q.x *= 1.0 - 0.3 * uFold * r;
+  float fa = -sd * uFold * 1.45 * sqrt(r);
+  float fl = sd * (uFlap * (0.55 + 0.45 * r) + uHand * r * r);
+  q = rotZ(rotY(q, fa), fl);
+  n = rotZ(rotY(n, fa), fl);
+  p = piv + q;
+}
+`;
+
+function toFloatAttr(attr) {
+  const n = attr.count, k = attr.itemSize, out = new Float32Array(n * k);
+  for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) out[i * k + c] = attr.getComponent(i, c);
+  return new THREE.BufferAttribute(out, k);
+}
+
 export class Wings {
-  constructor(cfg, envMap) {
+  constructor(cfg, envMap, glb) {
     this.cfg = cfg;
     const w = cfg.wing;
     this.scene = new THREE.Scene();
@@ -90,6 +118,7 @@ export class Wings {
     this.scene.add(this.sun, this.sun.target, new THREE.HemisphereLight(0xbfd8ff, 0x3a3020, 0.5));
     this.root = new THREE.Group();
     this.scene.add(this.root);
+    if (glb) { this.buildGlb(glb); this.t = 0; return; }
 
     const tex = featherAtlas(w);
     const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, metalness: 0 });
@@ -121,6 +150,43 @@ export class Wings {
     }
     this.t = 0;
     this._m = new THREE.Matrix4();
+  }
+
+  buildGlb(gltf) {
+    let src = null;
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((o) => { if (o.isMesh && !src) src = o; });
+    const g0 = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'uv']) if (src.geometry.attributes[name]) g0.setAttribute(name, toFloatAttr(src.geometry.attributes[name]));
+    g0.setIndex(src.geometry.index);
+    g0.applyMatrix4(src.matrixWorld);
+    g0.rotateY(Math.PI); // scan faces +z; the game's forward is -z
+    // drop the body: keep triangles whose centroid is out on a wing
+    const idx = g0.index.array, pos = g0.attributes.position;
+    const keep = [];
+    for (let t = 0; t < idx.length; t += 3) {
+      const cx = (pos.getX(idx[t]) + pos.getX(idx[t + 1]) + pos.getX(idx[t + 2])) / 3;
+      const cy = (pos.getY(idx[t]) + pos.getY(idx[t + 1]) + pos.getY(idx[t + 2])) / 3;
+      if (Math.abs(cx) > 0.13 && !(cy < -0.06 && Math.abs(cx) < 0.3)) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+    }
+    g0.setIndex(keep);
+    const mat = src.material.clone();
+    mat.side = THREE.DoubleSide;
+    this.bendU = { uFlap: { value: 0 }, uFold: { value: 0 }, uHand: { value: 0 }, uPivot: { value: new THREE.Vector4(0.12, -0.02, 0.02, 0.95) } };
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.bendU);
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n' + BEND_GLSL)
+        .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( normal );\n{ vec3 bp = position; bendWing(bp, objectNormal); }\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3( tangent.xyz );\n#endif')
+        .replace('#include <begin_vertex>', 'vec3 transformed = vec3( position );\n{ vec3 bn = normal; bendWing(transformed, bn); }');
+    };
+    mat.customProgramCacheKey = () => 'glbwing';
+    this.glbMesh = new THREE.Mesh(g0, mat);
+    this.glbMesh.frustumCulled = false;
+    this.glbMesh.position.set(0, -0.34, -0.36);
+    this.glbMesh.scale.setScalar(0.9);
+    this.root.add(this.glbMesh);
+    this.glb = true;
   }
 
   layout(s) {
@@ -188,6 +254,14 @@ export class Wings {
     const flutter = Math.min(body.airspeed / 60, 1.4);
     const bankAsym = body.bank;
     const offset = new V3(0, -0.1 * w.span * 0.6, 0.02);
+    if (this.glb) {
+      const U = this.bendU;
+      U.uFlap.value = flap - 0.04 + bankAsym * 0.0;
+      U.uFold.value = Math.min(1, fold);
+      U.uHand.value = Math.sin(ph - 0.6) * amp * 0.35 + load * 0.04;
+      // wings follow the body; small asymmetry in turns comes from the body roll relative to the head
+      return;
+    }
 
     for (const S of this.side) {
       const s = S.s;

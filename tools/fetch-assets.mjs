@@ -25,7 +25,7 @@ const TEXTURES = {
   bark: 'knotted_pine_bark',
   asphalt: 'aerial_asphalt_01',
 };
-const MODELS = ['Stork', 'Flamingo', 'Parrot'];
+const MODELS = ['Stork', 'Parrot'];
 
 async function get(url) {
   for (let i = 0; i < 4; i++) {

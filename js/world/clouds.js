@@ -103,6 +103,7 @@ export class Clouds {
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 5;
+    this.mesh.layers.enable(1);
     scene.add(this.mesh);
     this.puffs = [];
     this.lastCell = '';
@@ -113,7 +114,7 @@ export class Clouds {
   }
 
   makeDeck(scene, assets, deck) {
-    const g = new THREE.PlaneGeometry(60000, 60000, 64, 64);
+    const g = new THREE.PlaneGeometry(200000, 200000, 96, 96);
     g.rotateX(-Math.PI / 2);
     const u = { ...G, tNoise: { value: assets.tex.noise }, uHeight: { value: deck.height }, uCover: { value: deck.cover }, uAmbient: this.uniforms.uAmbient };
     const mat = new THREE.ShaderMaterial({
@@ -137,12 +138,12 @@ export class Clouds {
         uniform vec3 uSunColor, uAmbient;
         void main() {
           vec2 p = vFogWorld.xz;
-          float n = texture2D(tNoise, p / 5200.0 + uTime * 0.0015).r * 0.55
-                  + texture2D(tNoise, p / 1500.0 - uTime * 0.002).g * 0.3
-                  + texture2D(tNoise, p / 380.0 + uTime * 0.004).b * 0.15;
+          float n = texture2D(tNoise, p / 11000.0 + uTime * 0.0008).r * 0.55
+                  + texture2D(tNoise, p / 2600.0 - uTime * 0.0012).g * 0.3
+                  + texture2D(tNoise, p / 520.0 + uTime * 0.003).b * 0.15;
           float d = smoothstep(1.0 - uCover, 1.0 - uCover + 0.22, n);
           if (d < 0.01) discard;
-          float nx = texture2D(tNoise, (p + vec2(40.0, 0.0)) / 1500.0 - uTime * 0.002).g - texture2D(tNoise, p / 1500.0 - uTime * 0.002).g;
+          float nx = texture2D(tNoise, (p + vec2(80.0, 0.0)) / 2600.0 - uTime * 0.0012).g - texture2D(tNoise, p / 2600.0 - uTime * 0.0012).g;
           float lit = clamp(0.65 + nx * 6.0 * uSunDir.x + d * 0.3, 0.0, 1.2);
           bool below = cameraPosition.y < uHeight;
           vec3 col = below ? uAmbient * 0.7 + uFogColor * 0.3 : mix(uAmbient * 0.8, uSunColor * 1.3, lit);
@@ -153,6 +154,7 @@ export class Clouds {
     const m = new THREE.Mesh(g, mat);
     m.frustumCulled = false;
     m.renderOrder = 4;
+    m.layers.enable(1);
     scene.add(m);
     return m;
   }
@@ -173,7 +175,7 @@ export class Clouds {
       if (hash2(a, b, 71) > (cfg.coverage ?? 0.5)) continue;
       const x = (a + hash2(a, b, 72)) * C, z = (b + hash2(a, b, 73)) * C;
       if (Math.hypot(x - px, z - pz) > R) continue;
-      const scale = 0.6 + hash2(a, b, 74) * 0.9;
+      const scale = (0.6 + hash2(a, b, 74) * 0.9) * (cfg.size || 1);
       const y = cfg.base + hash2(a, b, 75) * (cfg.spread || 300);
       const rx = 380 * scale, ry = 170 * scale;
       const count = 8 + Math.floor(hash2(a, b, 76) * 14);

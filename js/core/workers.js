@@ -1,6 +1,6 @@
 // Small pool of terrain workers. Results are routed back by message key.
 export class WorkerPool {
-  constructor(count, biome, seed) {
+  constructor(count, biome, seed, sun) {
     this.workers = [];
     this.handlers = new Map();
     this.next = 0;
@@ -14,7 +14,7 @@ export class WorkerPool {
         if (h) h(e.data);
       };
       w.onerror = (e) => console.error('terrain worker error', e.message || e);
-      w.postMessage({ type: 'init', biome, seed });
+      w.postMessage({ type: 'init', biome, seed, sun: sun && { x: sun.x, y: sun.y, z: sun.z } });
       this.workers.push(w);
     }
   }

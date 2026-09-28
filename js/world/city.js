@@ -231,6 +231,7 @@ export class City {
       group.add(m);
       boxes.push([x - w / 2, y - h / 2, z - 0.2, x + w / 2, y + h / 2, z + 0.5]);
     }));
+    group.traverse((o) => o.layers.enable(1));
     this.group.add(group);
     return { group, boxes, mesh };
   }
