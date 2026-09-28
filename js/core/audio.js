@@ -1,7 +1,7 @@
 // Audio: streamed orchestral score (adaptive intensity), layered procedural wind, banking whooshes,
 // wing beats, a thermal variometer, bird calls and biome ambience.
 const MUSIC = { forest: 'music_forest', coast: 'music_coast', mountains: 'music_mountains', city: 'music_city', menu: 'music_menu' };
-const CALLS = { forest: ['call_hawk_1', 'call_hawk_2'], coast: ['call_gull_1', 'call_gull_2'], mountains: ['call_hawk_1'], city: ['call_pigeon_1', 'call_pigeon_2'] };
+const CALLS = { forest: ['call_hawk_1', 'call_hawk_2', 'call_hawk_3', 'call_raven_1'], coast: ['call_gull_1', 'call_gull_2', 'call_gull_3'], mountains: ['call_hawk_1', 'call_hawk_3', 'call_raven_1'], city: ['call_pigeon_1', 'call_pigeon_2'] };
 const AMBIENCE = { forest: 'amb_forest', coast: 'amb_waves', mountains: 'amb_wind', city: 'amb_city' };
 
 export class Audio {
@@ -125,15 +125,28 @@ export class Audio {
     if (!this.ctx) return;
     this.biome = biome;
     this.playMusic(biome);
-    this.stopStream(this.ambStream);
-    this.ambStream = null;
+    this.stopGame();
     this.ambGain = this.ctx.createGain(); this.ambGain.gain.value = 0; this.ambGain.connect(this.sfx);
-    fetch(`assets/audio/${AMBIENCE[biome]}.m4a`, { method: 'HEAD' }).then((r) => { if (r.ok) this.ambStream = this.stream(AMBIENCE[biome], this.ambGain); }).catch(() => {});
+    // ambience loops are short: decode and loop the buffer (seamless, unlike <audio loop>)
+    const ambName = AMBIENCE[biome];
+    this.loadBuffer(ambName).then((buf) => {
+      if (!buf || this.biome !== biome || !this.ambGain) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      src.loopStart = 0.05; src.loopEnd = buf.duration - 0.05; // skip AAC priming at the edges
+      src.connect(this.ambGain);
+      src.start(0, 0.05);
+      this.ambSrc = src;
+    });
     CALLS[biome].forEach((c) => this.loadBuffer(c));
     this.callT = 5 + Math.random() * 6;
   }
 
-  stopGame() { this.stopStream(this.ambStream); this.ambStream = null; }
+  stopGame() {
+    this.stopStream(this.ambStream); this.ambStream = null;
+    try { this.ambSrc?.stop(); } catch { /* already stopped */ }
+    this.ambSrc = null;
+  }
 
   // ---------- procedural one-shots ----------
   burst(freq, dur, vol, type = 'lowpass', sweepTo, pan = 0) {
@@ -179,6 +192,10 @@ export class Audio {
   splash() { this.burst(2500, 0.7, 0.5, 'lowpass', 250); this.burst(300, 0.5, 0.45, 'lowpass', 70); }
   thump(v = 0.5) { this.tone(110, 38, 0.35, v, 'sine'); this.burst(900, 0.25, v * 0.5); }
   thunder(delay) { setTimeout(() => { this.burst(180, 4, 0.7, 'lowpass', 35); this.burst(900, 0.6, 0.25, 'lowpass', 100); }, delay * 1000); }
+  takeoff(bird) {
+    if (bird === 'pigeon') this.playBuffer('flap_pigeon', { vol: 0.5 }).then((ok) => { if (!ok) this.whoosh(); });
+    else this.whoosh();
+  }
   whoosh(pan = 0) { this.burst(2200, 0.55, 0.3, 'bandpass', 380, pan); }
 
   update(dt, s) {

@@ -1,0 +1,169 @@
+[
+  {
+    "file": "music_forest.m4a",
+    "title": "Ride of the Valkyries (Die Walküre, Act 3 prelude)",
+    "composer": "Richard Wagner (1813–1883)",
+    "performer": "Conducted by Philip Milman (pmmusic.pro); per the file page, funded by Ludwig and Schlatt",
+    "license": "CC BY 3.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Ride_of_the_Valkyries.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/9/91/Ride_of_the_Valkyries.ogg",
+    "notes": "Full piece (2:16). Transcoded to AAC-LC .m4a (stereo, 44.1 kHz, 128 kb/s); leading/trailing silence trimmed; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1.5, two-pass linear). Attribution required (CC BY 3.0). The file page gives https://www.youtube.com/watch?v=uNkRW_9pHRQ as its source."
+  },
+  {
+    "file": "music_mountains.m4a",
+    "title": "In the Hall of the Mountain King (Peer Gynt Suite No. 1, Op. 46)",
+    "composer": "Edvard Grieg (1843–1907)",
+    "performer": "Czech National Symphony Orchestra, performing as the Musopen Symphony Orchestra (Musopen Kickstarter project)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Musopen_-_In_the_Hall_Of_The_Mountain_King.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Musopen_-_In_the_Hall_Of_The_Mountain_King.ogg",
+    "notes": "Full piece (2:32). Transcoded to AAC-LC .m4a (stereo, 44.1 kHz, 128 kb/s); leading/trailing silence trimmed; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1.5, two-pass linear)."
+  },
+  {
+    "file": "music_coast.m4a",
+    "title": "The Hebrides (Fingal's Cave) Overture, Op. 26",
+    "composer": "Felix Mendelssohn (1809–1847)",
+    "performer": "Musopen Symphony Orchestra (Musopen)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Mendelssohn_-_Hebrides_Overture,_Op._26_(Musopen_Symphony).flac",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/2/24/Mendelssohn_-_Hebrides_Overture%2C_Op._26_%28Musopen_Symphony%29.flac",
+    "notes": "Source is 24-bit FLAC, 11:22 long. Trimmed to the first 5:00 (opening theme and first climax), with 3 s fade-in and fade-out. Transcoded to AAC-LC .m4a (stereo, 44.1 kHz, 128 kb/s); leading/trailing silence trimmed; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1.5, two-pass linear)."
+  },
+  {
+    "file": "music_city.m4a",
+    "title": "Flight of the Bumblebee (The Tale of Tsar Saltan, Op. 57)",
+    "composer": "Nikolai Rimsky-Korsakov (1844–1908)",
+    "performer": "Concert Band of the United States Air Force Band of the Rockies (from \"Hands Across the Sea\", 2007)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Flight_of_the_Bumblebee_-_Concert_Band_-_United_States_Air_Force_Band_of_the_Rockies.mp3",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/7/75/Flight_of_the_Bumblebee_-_Concert_Band_-_United_States_Air_Force_Band_of_the_Rockies.mp3",
+    "notes": "Concert-band arrangement, not full orchestra. A US military performance (work of the US federal government). Full piece; the quiet tail was removed, leaving 1:15. Transcoded to AAC-LC .m4a (stereo, 44.1 kHz, 128 kb/s); leading/trailing silence trimmed; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1.5, two-pass linear)."
+  },
+  {
+    "file": "music_menu.m4a",
+    "title": "Symphony No. 9 in E minor \"From the New World\", Op. 95 – IV. Allegro con fuoco",
+    "composer": "Antonín Dvořák (1841–1904)",
+    "performer": "Musopen recording (orchestra not named on the file page)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Antonin_Dvorak_-_symphony_no._9_in_e_minor_%27from_the_new_world%27,_op._95_-_iv._allegro_con_fuoco.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/1/17/Antonin_Dvorak_-_symphony_no._9_in_e_minor_%27from_the_new_world%27%2C_op._95_-_iv._allegro_con_fuoco.ogg",
+    "notes": "Source is 11:43 long. Trimmed to the first 5:00 (the famous opening), with 3 s fade-in and fade-out. Transcoded to AAC-LC .m4a (stereo, 44.1 kHz, 128 kb/s); leading/trailing silence trimmed; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1.5, two-pass linear)."
+  },
+  {
+    "file": "call_hawk_1.m4a",
+    "title": "Red-tailed Hawk (Buteo jamaicensis) call, XC71575",
+    "performer": "Jonathon Jongsma (via xeno-canto)",
+    "license": "CC BY-SA 3.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Buteo_jamaicensis_-_Red-tailed_Hawk_XC71575.mp3",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/0/0f/Buteo_jamaicensis_-_Red-tailed_Hawk_XC71575.mp3",
+    "notes": "0.3–1.9 s of the source. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear). ShareAlike: this derivative clip stays under CC BY-SA 3.0."
+  },
+  {
+    "file": "call_hawk_2.m4a",
+    "title": "Screaming Hawk",
+    "performer": "PsychoBird (via Soundbible)",
+    "license": "CC BY 3.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Screaming_Hawk.wav",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/9/9d/Screaming_Hawk.wav",
+    "notes": "0–1.9 s of the source. The species is not stated. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "call_hawk_3.m4a",
+    "title": "Red-shouldered Hawk (Buteo lineatus), Gainesville FL",
+    "performer": "G. McGrane",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Red-shouldered_Hawk.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/9/95/Red-shouldered_Hawk.ogg",
+    "notes": "12.8–16.0 s of the source (two \"kee-aah\" calls). Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "call_gull_1.m4a",
+    "title": "Gull 1 – Herring Gull (Larus argentatus), Long Island USA 1999",
+    "performer": "avphillips (PDSounds)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Gull_1.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/4/43/Gull_1.ogg",
+    "notes": "0–3.3 s of the source. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "call_gull_2.m4a",
+    "title": "Gull 2 – Herring Gull (Larus argentatus), Damariscotta Falls, Maine 1998",
+    "performer": "avphillips (PDSounds)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Gull_2.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Gull_2.ogg",
+    "notes": "0.2–3.6 s of the source. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "call_gull_3.m4a",
+    "title": "Western Gull, Golden Gate National Recreation Area",
+    "performer": "National Park Service",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Western_Gull_Golden_Gate_National_Recreation_Area.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/9/96/Western_Gull_Golden_Gate_National_Recreation_Area.ogg",
+    "notes": "0.2–4.2 s of the source. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "call_pigeon_1.m4a",
+    "title": "Rock Dove (Columba livia) call, XC539061, Paris",
+    "performer": "Marie-Lan Taÿ Pamart (via xeno-canto)",
+    "license": "CC BY-SA 4.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Columba_livia_-_Rock_Dove_XC539061.mp3",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Columba_livia_-_Rock_Dove_XC539061.mp3",
+    "notes": "1.1–3.1 s of the source. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear). ShareAlike applies."
+  },
+  {
+    "file": "call_pigeon_2.m4a",
+    "title": "Rock Dove (Columba livia) call, XC541143, Paris",
+    "performer": "Marie-Lan Taÿ Pamart (via xeno-canto)",
+    "license": "CC BY-SA 4.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Columba_livia_-_Rock_Dove_XC541143.mp3",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/e/e5/Columba_livia_-_Rock_Dove_XC541143.mp3",
+    "notes": "11.5–14.5 s of the source (coos). The source page mentions vacuum-cleaner background noise. Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear). ShareAlike applies."
+  },
+  {
+    "file": "call_raven_1.m4a",
+    "title": "Common Raven, Grand Teton National Park",
+    "performer": "National Park Service",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Common_Raven_Grand_Teton_National_Park.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/a/ad/Common_Raven_Grand_Teton_National_Park.ogg",
+    "notes": "0.2–5.0 s of the source (four croaks). Cut to an isolated call, short fades applied, 150 Hz high-pass; transcoded to mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-16 LUFS, TP=-1, two-pass linear)."
+  },
+  {
+    "file": "flap_pigeon.m4a",
+    "title": "Aleteo de aves (bird wing flapping), Isla Anapia, Puno, Peru",
+    "performer": "Vega16 (Susurros del Lago project)",
+    "license": "CC BY-SA 4.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Wiki_Aleteo_de_aves.wav",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/0/07/Wiki_Aleteo_de_aves.wav",
+    "notes": "The species is NOT stated and it is not necessarily a pigeon; this is a generic bird wing-flap burst used in place of a pigeon take-off. 1.8–4.4 s of the source; 80 Hz high-pass and fades; mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudnorm I=-16. ShareAlike applies."
+  },
+  {
+    "file": "amb_forest.m4a",
+    "title": "forest ambience (20090610_0)",
+    "performer": "nille (PDSounds)",
+    "license": "Public domain",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:20090610_0_ambience.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/0/0a/20090610_0_ambience.ogg",
+    "notes": "5–37 s of the source made into a 30 s loop with a 2 s crossfade. Excerpt made into a loop by equal-power crossfading its tail into its head; high-pass filtered; mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-20 LUFS, a quieter level suited to a background bed)."
+  },
+  {
+    "file": "amb_waves.m4a",
+    "title": "Oceanwavescrushing (waves on the shore of Kalundborg Fjord, Røsnæs)",
+    "performer": "Luftrum (freesound.org/people/Luftrum/sounds/48412/)",
+    "license": "CC BY 3.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Oceanwavescrushing.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f1/Oceanwavescrushing.ogg",
+    "notes": "60–99 s of the source made into a 36 s loop with a 3 s crossfade. Excerpt made into a loop by equal-power crossfading its tail into its head; high-pass filtered; mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-20 LUFS, a quieter level suited to a background bed)."
+  },
+  {
+    "file": "amb_wind.m4a",
+    "title": "Wind in Swedish pine forest at 25 m/s",
+    "performer": "W.carter",
+    "license": "CC BY-SA 4.0",
+    "sourcePage": "https://commons.wikimedia.org/wiki/File:Wind_in_Swedish_pine_forest_at_25_mps.ogg",
+    "originalUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f3/Wind_in_Swedish_pine_forest_at_25_mps.ogg",
+    "notes": "3–35 s of the source made into a 30 s loop with a 2 s crossfade. Excerpt made into a loop by equal-power crossfading its tail into its head; high-pass filtered; mono AAC-LC .m4a 44.1 kHz 96 kb/s; loudness-normalised with ffmpeg loudnorm (I=-20 LUFS, a quieter level suited to a background bed). ShareAlike applies."
+  }
+]

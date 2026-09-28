@@ -189,6 +189,17 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 window.addEventListener('resize', () => game?.resize());
 $('#rotate').classList.add('armed');
 
+// Audio credits (CC BY / BY-SA recordings require attribution)
+fetch('assets/audio/credits.json').then((r) => r.json()).then((list) => {
+  const box = $('#credits');
+  for (const c of list) {
+    const p = document.createElement('p');
+    const who = [c.composer, c.performer].filter(Boolean).join(' / ');
+    p.innerHTML = `${c.title}${who ? ' — ' + who : ''}. <a href="${c.sourcePage}" target="_blank" rel="noopener">${c.license}</a>${/BY/.test(c.license) ? ' (edited: trimmed, normalised, transcoded)' : ''}`;
+    box.appendChild(p);
+  }
+}).catch(() => {});
+
 // Allow deep-linking a bird for quick testing: index.html#hawk
 const deep = location.hash.slice(1);
 if (BIRDS[deep]) startGame(deep).catch(fail);

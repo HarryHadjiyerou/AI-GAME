@@ -582,7 +582,7 @@ export class Game {
         if (fromWater) b.vel.y += 2.5;
         if (b.mode === 'flying' && this.groundH !== undefined && b.pos.y - this.field.height(b.pos.x, b.pos.z) < 1) b.vel.y += 1.5;
         this.ui.hint('', 0);
-        this.audio.whoosh();
+        this.audio.takeoff(this.cfg.id);
       }
     }
     if (inp.rollTrick && b.mode === 'flying' && this.stun <= 0 && b.startRoll(inp.rollTrick)) this.audio.whoosh(inp.rollTrick * 0.6);
