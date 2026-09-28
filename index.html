@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AVES">
+  <meta name="theme-color" content="#0b0f14">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+  <title>AVES</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;500&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+
+  <!-- MENU -->
+  <section id="menu" class="screen visible">
+    <div class="menu-bg"></div>
+    <header class="brand">
+      <h1>AVES</h1>
+      <p>see the world through the eyes of a bird</p>
+    </header>
+    <div class="cards">
+      <button class="card" data-bird="hawk">
+        <div class="card-art hawk">
+          <svg viewBox="0 0 200 80"><path d="M100 38c-6-2-10-7-12-12-16 2-44 0-78 16 26-2 44 0 60 6-10 2-16 6-18 10 14-4 30-4 40 0 4 6 6 12 8 20 2-8 4-14 8-20 10-4 26-4 40 0-2-4-8-8-18-10 16-6 34-8 60-6-34-16-62-14-78-16-2 5-6 10-12 12z"/></svg>
+        </div>
+        <div class="card-text"><h2>Hawk</h2><h3>The Forest</h3><p>Fast, precise and built to dive. Thread giant redwoods, ride thermals over misty valleys.</p></div>
+      </button>
+      <button class="card" data-bird="seagull">
+        <div class="card-art seagull">
+          <svg viewBox="0 0 200 80"><path d="M100 42c-4-1-7-4-9-7-10-12-30-20-80-18 36 6 58 14 70 26-2 2-2 4 0 5 8-3 14-3 19-2 5-1 11-1 19 2 2-1 2-3 0-5 12-12 34-20 70-26-50-2-70 6-80 18-2 3-5 6-9 7z"/></svg>
+        </div>
+        <div class="card-text"><h2>Seagull</h2><h3>The Coast</h3><p>Master of the wind. Skim the waves, soar the cliffs, fold and plunge into the sea.</p></div>
+      </button>
+      <button class="card" data-bird="condor">
+        <div class="card-art condor">
+          <svg viewBox="0 0 200 80"><path d="M100 36c-5 0-8-3-10-6-20-2-50 4-86 14 6 2 10 0 14 2-4 2-4 4-2 6 6-2 8 0 12 0-2 2-2 4 0 6 20-6 44-10 62-10 2 8 6 14 10 20 4-6 8-12 10-20 18 0 42 4 62 10 2-2 2-4 0-6 4 0 6-2 12 0 2-2 2-4-2-6 4-2 8 0 14-2-36-10-66-16-86-14-2 3-5 6-10 6z"/></svg>
+        </div>
+        <div class="card-text"><h2>Condor</h2><h3>The Mountains</h3><p>Effortless. Climb thermals above the clouds and see the curve of the world.</p></div>
+      </button>
+      <button class="card" data-bird="pigeon">
+        <div class="card-art pigeon">
+          <svg viewBox="0 0 200 80"><path d="M100 34c-5 0-8-3-9-7-14 0-40 4-66 18 18-2 34 0 48 4-6 4-8 8-8 12 10-4 22-6 30-4 1 6 3 10 5 14 2-4 4-8 5-14 8-2 20 0 30 4 0-4-2-8-8-12 14-4 30-6 48-4-26-14-52-18-66-18-1 4-4 7-9 7z"/></svg>
+        </div>
+        <div class="card-text"><h2>Pigeon</h2><h3>The City</h3><p>Absurdly agile. Rooftop to street canyon, through cranes and under bridges.</p></div>
+      </button>
+    </div>
+    <footer class="options">
+      <label>Quality
+        <select id="optQuality">
+          <option value="auto">Auto</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+      <label class="toggle"><input type="checkbox" id="optInvert"> Invert pitch</label>
+      <label class="toggle"><input type="checkbox" id="optSound" checked> Sound</label>
+      <label class="toggle"><input type="checkbox" id="optVario" checked> Thermal beeper</label>
+    </footer>
+  </section>
+
+  <!-- LOADING -->
+  <section id="loading" class="screen">
+    <div class="load-inner">
+      <h2 id="loadTitle">The Forest</h2>
+      <div class="bar"><i id="loadBar"></i></div>
+      <p id="loadHint">Real Poly Haven skies · procedural terrain · baked tree impostors</p>
+    </div>
+  </section>
+
+  <!-- HUD / CONTROLS -->
+  <section id="hud" class="screen">
+    <div class="hud-top">
+      <div class="hud-bird"><span id="hudBird">Hawk</span><small id="hudBiome">The Forest</small></div>
+      <div class="hud-score"><span id="hudScore">0</span><small id="hudCombo"></small></div>
+      <button id="btnPause" aria-label="Pause">❚❚</button>
+    </div>
+    <div class="hud-instruments">
+      <div><b id="hudSpeed">0</b><small>km/h</small></div>
+      <div><b id="hudAlt">0</b><small>m above ground</small></div>
+      <div class="vario"><i id="hudVario"></i><small id="hudVarioTxt">0.0</small></div>
+    </div>
+    <div id="hint" class="hint"></div>
+    <div id="toasts"></div>
+    <div id="stickZone"><div id="stickBase"><div id="stickKnob"></div></div><span class="zone-hint">steer</span></div>
+    <div class="buttons">
+      <button id="btnDive" class="btn">DIVE</button>
+      <button id="btnBoost" class="btn">BOOST<svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" id="staminaRing"/></svg></button>
+      <button id="btnFlap" class="btn big">FLAP</button>
+    </div>
+  </section>
+
+  <!-- PAUSE -->
+  <section id="pause" class="screen">
+    <div class="pause-inner">
+      <h2>Paused</h2>
+      <button id="btnResume" class="wide">Resume</button>
+      <button id="btnMenu" class="wide ghost">Choose another bird</button>
+      <div class="help">
+        <p><b>Touch</b> — left thumb steers (push forward to dive, pull back to climb/flare). FLAP to take off and climb, hold BOOST for a burst of speed, hold DIVE to tuck your wings.</p>
+        <p><b>Keyboard</b> — WASD / arrows steer · Space flap · Shift boost · E dive · P pause</p>
+        <p><b>Tips</b> — circling birds mark thermals. Glide in slowly to land on rooftops, cliffs and branches.</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="rotate" class="screen"><div><div class="phone"></div><p>Rotate your phone to landscape</p></div></div>
+  <div id="error" class="screen"><div><h2>Something went wrong</h2><pre id="errorText"></pre></div></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

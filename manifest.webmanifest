@@ -1,0 +1,10 @@
+{
+  "name": "AVES",
+  "short_name": "AVES",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "icons": [{ "src": "assets/icon.png", "sizes": "512x512", "type": "image/png" }]
+}

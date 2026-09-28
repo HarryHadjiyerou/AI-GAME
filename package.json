@@ -1,0 +1,16 @@
+{
+  "name": "aves",
+  "private": true,
+  "version": "0.1.0",
+  "description": "First-person bird flight game (three.js, static site)",
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "test:flight": "node tests/flight-sim.mjs",
+    "fetch-assets": "node tools/fetch-assets.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.0",
+    "three": "0.186.1"
+  }
+}

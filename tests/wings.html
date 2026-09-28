@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Wing rig test</title>
+<style>body{margin:0;background:#8ab4d8;overflow:hidden}canvas{display:block}#ui{position:fixed;top:8px;left:8px;font:12px sans-serif;background:#0008;color:#fff;padding:6px}</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/build/three.module.js","three/addons/":"../vendor/three/examples/jsm/"}}</script>
+</head><body><div id="ui"></div>
+<script type="module">
+import * as THREE from 'three';
+import { BIRDS } from '../js/flight/birds.js';
+import { Wings } from '../js/flight/wings.js';
+const q = new URLSearchParams(location.search);
+const bird = q.get('bird') || 'hawk';
+const view = q.get('view') || 'fp';
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+r.setClearColor(0x8ab4d8);
+const cfg = BIRDS[bird];
+const w = new Wings(cfg, null);
+w.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const grid = new THREE.GridHelper(4, 20); grid.position.y = -0.5; w.scene.add(grid);
+const cam = new THREE.PerspectiveCamera(view === 'fp' ? cfg.cam.fov : 45, innerWidth / innerHeight, 0.01, 100);
+const body = { quat: new THREE.Quaternion(), flapPhase: 0, flapAmt: +(q.get('flap') || 0), tuck: +(q.get('tuck') || 0), boosting: false, gLoad: 1, airspeed: 20, bank: +(q.get('bank') || 0), mode: q.get('mode') || 'flying' };
+body.quat.setFromEuler(new THREE.Euler(0, 0, -body.bank));
+const ph = +(q.get('phase') || 0);
+body.flapPhase = ph;
+if (view === 'fp') { cam.position.set(0, 0.06, 0); cam.quaternion.identity(); }
+else if (view === 'top') { cam.position.set(0, 2.2, 0.3); cam.lookAt(0, 0, 0); }
+else if (view === 'front') { cam.position.set(0, 0.2, -2.2); cam.lookAt(0, 0, 0); }
+else { cam.position.set(1.4, 1.0, 1.8); cam.lookAt(0, 0, 0); }
+const fpCam = new THREE.PerspectiveCamera(); fpCam.position.set(0, 0.06, 0);
+w.update(0.016, body, fpCam, new THREE.Vector3(0.3, 1, 0.2).normalize());
+r.render(w.scene, cam);
+document.getElementById('ui').textContent = `${bird} view=${view} flap=${body.flapAmt} phase=${ph} tuck=${body.tuck}`;
+window.done = true;
+</script></body></html>
