@@ -102,10 +102,14 @@ button { font: inherit; color: inherit; }
 .help { text-align: left; color: var(--ink-dim); font-size: 12px; line-height: 1.5; margin-top: 12px; }
 .help b { color: var(--ink); }
 
-#rotate { align-items: center; justify-content: center; background: #07090d; z-index: 50; text-align: center; color: var(--ink-dim); }
-.phone { width: 40px; height: 70px; border: 2px solid var(--ink); border-radius: 8px; margin: 0 auto 16px; animation: rot 2s ease-in-out infinite; }
+#rotate { align-items: center; justify-content: center; background: rgba(7, 9, 13, 0.92); z-index: 50; text-align: center; color: var(--ink); font-size: 18px; letter-spacing: 0.04em; }
+#rotate p { margin: 0 24px; }
+.phone { width: 44px; height: 76px; border: 3px solid var(--ink); border-radius: 8px; margin: 0 auto 16px; animation: rot 2s ease-in-out infinite; }
 @keyframes rot { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
-@media (orientation: portrait) and (max-width: 900px) { #rotate.armed { display: flex; } }
+/* only ask for landscape while playing: the menu works in portrait */
+@media (orientation: portrait) and (max-width: 900px) { body.playing #rotate.armed { display: flex; } }
+.portrait-note { display: none; color: var(--accent); font-size: 12px; letter-spacing: 0.1em; margin-top: 6px; text-align: center; }
+@media (orientation: portrait) and (max-width: 900px) { .portrait-note { display: block; } }
 #error { align-items: center; justify-content: center; background: #07090d; z-index: 60; padding: 20px; }
 #error pre { white-space: pre-wrap; color: #ff9a9a; font-size: 12px; max-width: 90vw; }
 

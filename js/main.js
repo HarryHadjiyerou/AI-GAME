@@ -9,7 +9,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = (s) => document.querySelector(s);
 const screens = ['menu', 'loading', 'hud', 'pause'];
-function show(...ids) { screens.forEach((s) => $('#' + s).classList.toggle('visible', ids.includes(s))); }
+function show(...ids) {
+  screens.forEach((s) => $('#' + s).classList.toggle('visible', ids.includes(s)));
+  document.body.classList.toggle('playing', !ids.includes('menu'));
+}
 
 function fail(e) {
   console.error(e);
