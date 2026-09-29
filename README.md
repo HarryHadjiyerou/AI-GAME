@@ -65,8 +65,9 @@ js/world/
   terrain.js                   quadtree LOD streaming + splat shader (Poly Haven textures, cliffs, snow, city streets)
   water.js                     Gerstner waves, planar scene reflections, depth colour, shore foam, frozen lakes
   sky.js / clouds.js           HDRI sky dome, lit billboard cumulus, cloud deck, storm cell
-  trees.js                     instanced procedural trees + impostors baked at runtime for distance
-  titans.js                    titan trees with branch geometry, capsule/sphere collision
+  treeAssets.js                loads the Blender-built tree GLBs, foliage atlas and bark; shared foliage/bark materials
+  trees.js                     instanced trees (two LODs) + impostors baked at runtime for distance
+  titans.js                    titan trees (Blender-built), capsule/sphere collision
   city.js                      towers with shader-drawn windows, bridges, frames, cranes, billboards, shader-driven traffic
   extras.js                    thermals, GLB bird flocks, particles, boats, lighthouse, lightning, waterfalls
 js/core/
@@ -99,6 +100,7 @@ The download and conversion script is `tools/fetch-assets.mjs`, so every downloa
 |---|---|---|
 | HDRI skies: `rustig_koppie_puresky` (forest), `table_mountain_1_puresky` (coast), `kloofendal_48d_partly_cloudy_puresky` (mountains), `industrial_sunset_02_puresky` (city) | [Poly Haven](https://polyhaven.com) | CC0 |
 | PBR textures: `aerial_grass_rock`, `forest_leaves_04`, `rocky_terrain_02`, `aerial_rocks_02`, `snow_field_aerial`, `aerial_beach_01`, `knotted_pine_bark`, `aerial_asphalt_01` | Poly Haven | CC0 |
+| Tree textures (foliage cards and bark): `fir_tree_01` (twig, bark), `pine_tree_01` (twig, bark), `island_tree_01` (leaves, branches), `japanese_cedar_bark`. Downloaded by `tools/trees/fetch-sources.mjs` and rendered into foliage cards in Blender. The palm frond card is assembled in Blender from the island-tree leaves | Poly Haven | CC0 |
 | `waternormals.jpg` | three.js examples | MIT (three.js repo) |
 | **Hawk In Full Wingspan** by [restore50](https://sketchfab.com/restore50) — [Sketchfab](https://sketchfab.com/3d-models/hawk-in-full-wingspan-160aa78ceba04adeb0794266cd74257c) (supplied by you). Optimised by `tools/optimize-hawk.mjs` into `hawk_hi.glb` (88k tris, first-person wings) and `hawk_lo.glb` (13k tris, soaring hawks + menu) | Sketchfab | CC-BY-4.0: attribution required (this line) |
 | `stork.glb`, `parrot.glb` (ambient flocks on the coast, mountains and city) | three.js examples (originally from the RO.ME project) | They ship in the MIT-licensed three.js repo, but I have **not verified** separate licence terms for the models. Replace them before any commercial release. |
@@ -139,9 +141,18 @@ Each world has its own orchestral piece, streamed so long tracks don't sit in me
 
 ## Known limitations of V1
 
-- **Not tested on a real iPhone.** All testing so far used headless Chromium with software WebGL: screenshots of every biome, scripted landing, take-off and plunge checks, and touch emulation at 844×390. At the spawn point on Medium, one frame measured about 200 draw calls in The Wilds, 215 at the coast, 130 in the mountains and 400 in the city (1–2.3 million triangles), not counting the reflection pass. The bigger world, titans, baked lighting and reflections all cost more than V1. Real device frame rate is unmeasured, and Low quality may be needed on older iPhones.
+- **Not tested on a real iPhone.** All testing so far used headless Chromium with software WebGL: screenshots of every biome, scripted landing, take-off and plunge checks, and touch emulation at 844×390. At the spawn point on Medium, one frame measured about 200 draw calls in The Wilds, 215 at the coast, 130 in the mountains and 400 in the city (1–2.3 million triangles), not counting the reflection pass. The bigger world, titans, baked lighting and reflections all cost more than V1. The Blender trees are heavier than the old procedural ones. Over dense Wilds forest on Medium, the 3D trees alone come to about 1.2 million triangles: roughly 250 trees at full detail within 85–110 m and about 2,900 at LOD1 out to 380 m. Real device frame rate is unmeasured, and Low quality may be needed on older iPhones.
 - **Wings:** the hawk uses the real scan. It has no skeleton, so flapping and folding are approximated by bending the wing geometry in a shader (outer wing lags, fold sweeps back); it won't match a properly rigged wing up close. The seagull, condor and pigeon still use the procedural feather rig.
-- **Trees are procedural.** Poly Haven's tree models are 2–17 million polygons each, far too heavy to draw in real time on a phone. They're replaced with instanced branch-card trees plus impostors baked when the game loads. The titan trees are procedural too. Their leaf clumps still look somewhat stylised up close.
+- **Trees are Blender-generated, not scanned.** Poly Haven's tree models are 2–17 million polygons each, far too heavy to draw in real time on a phone. Instead, `tools/trees/` runs headless Blender:
+  - It renders Poly Haven twig and leaf textures into photographic foliage cards.
+  - It builds seven species (redwood, fir, pine, broadleaf, palm and two titans) from bark tubes and those cards, with baked crown occlusion.
+  - Each species is exported as a GLB at two levels of detail, roughly 300–2,100 triangles for normal trees and 2,000–4,900 for titans.
+
+  Impostors are still baked at load time for the distance. Up close the cards are visible as flat planes, and the pine card carries some dry orange needles from the source texture. To rebuild the trees, run these in order:
+  1. `node tools/trees/fetch-sources.mjs`
+  2. `blender -b -P tools/trees/build_cards.py -- build/tree-src build/tree-cards`
+  3. `blender -b -P tools/trees/build_trees.py -- build/tree-out [build/tree-previews]`
+  4. `node tools/trees/build_atlas.mjs`
 - **Fog and clouds are approximations.** The "volumetric" fog is analytic height fog with sun in-scattering, not raymarched. Clouds are lit billboards plus a cloud-deck shader, not volumetric.
 - **Mountain faces** can look streaky ("curtain" shading) at distance where the height-field grid is coarse on very steep slopes.
 - **Physics shortcuts.** Rivers and lakes all sit at one water level. Underwater diving is faked (tint, buoyancy, a random fish). Collisions use the height field, tree cylinders and cones, and building boxes.

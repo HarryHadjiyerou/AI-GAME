@@ -156,7 +156,14 @@ export class Rings {
       const dd = Math.hypot(t.x - best.p.x, t.z - best.p.z);
       if (dd < 160) {
         const side = new THREE.Vector3(-best.dir.z, 0, best.dir.x);
-        best.p.set(t.x + side.x * t.H * 0.16, t.y + t.H * 0.26, t.z + side.z * t.H * 0.16);
+        const keep = best.p.clone();
+        // try either side of the trunk, and a bit further out, until the ring is clear of roots and limbs
+        let ok = false;
+        for (const [sg, k] of [[1, 0.16], [-1, 0.16], [1, 0.24], [-1, 0.24]]) {
+          best.p.set(t.x + side.x * t.H * k * sg, t.y + t.H * 0.26, t.z + side.z * t.H * k * sg);
+          if (!g.titans.collide(best.p, 12).hit) { ok = true; break; }
+        }
+        if (!ok) { best.p.copy(keep); break; }
         best.titan = true;
         break;
       }

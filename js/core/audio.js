@@ -2,7 +2,7 @@
 // wing beats, a thermal variometer, bird calls and biome ambience.
 const MUSIC = { forest: 'music_forest', coast: 'music_coast', mountains: 'music_mountains', city: 'music_city', menu: 'music_menu' };
 const CALLS = { forest: ['call_hawk_1', 'call_hawk_2', 'call_hawk_3', 'call_raven_1'], coast: ['call_gull_1', 'call_gull_2', 'call_gull_3'], mountains: ['call_hawk_1', 'call_hawk_3', 'call_raven_1'], city: ['call_pigeon_1', 'call_pigeon_2'] };
-const AMBIENCE = { forest: 'amb_forest', coast: 'amb_waves', mountains: 'amb_wind', city: 'amb_city' };
+const AMBIENCE = { forest: 'amb_forest', coast: 'amb_waves', mountains: 'amb_wind', city: 'amb_wind' };
 
 export class Audio {
   constructor() {

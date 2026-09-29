@@ -1,153 +1,21 @@
-// Procedural instanced trees with runtime-baked impostors for the distance.
+// Instanced Blender-built trees (two LODs) with runtime-baked impostors for the distance.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { patchMaterial, G, CURVE_VERT_PARS, FOG_FRAG_PARS } from '../core/shaderPatch.js';
-import { mulberry32 } from '../core/noise.js';
+import { foliageMaterial, barkMaterial } from './treeAssets.js';
 import { TREE } from './fields.js';
 import { hdrType } from '../core/post.js';
 
 const TILE = 256;
 
-// ---------- textures ----------
-function needleTexture() {
-  // A dense conifer frond: solid tapered silhouette (survives mip-mapping) with needle detail on top.
-  const S = 256, c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d');
-  const r = mulberry32(3);
-  const frond = (x0, y0, len, ang, wid, shade) => {
-    g.save();
-    g.translate(x0, y0); g.rotate(ang);
-    g.beginPath();
-    g.moveTo(0, 0);
-    const n = 14;
-    for (let i = 0; i <= n; i++) { const t = i / n; g.lineTo(t * len, -wid * Math.sin(Math.PI * Math.pow(t, 0.8)) * (0.8 + r() * 0.35)); }
-    for (let i = n; i >= 0; i--) { const t = i / n; g.lineTo(t * len, wid * Math.sin(Math.PI * Math.pow(t, 0.8)) * (0.8 + r() * 0.35)); }
-    g.closePath();
-    g.fillStyle = `rgb(${40 * shade | 0},${86 * shade | 0},${44 * shade | 0})`;
-    g.fill();
-    g.lineCap = 'round';
-    for (let i = 0; i < len / 2; i++) {
-      const t = i / (len / 2), px = t * len;
-      const w = wid * Math.sin(Math.PI * Math.pow(t, 0.8));
-      for (const sgn of [-1, 1]) {
-        const l = w * (0.7 + r() * 0.5);
-        const v = 0.7 + r() * 0.6;
-        g.strokeStyle = `rgb(${52 * v * shade | 0},${118 * v * shade | 0},${60 * v * shade | 0})`;
-        g.lineWidth = 1.4;
-        g.beginPath(); g.moveTo(px, 0); g.lineTo(px + l * 0.45, sgn * l); g.stroke();
-      }
-    }
-    g.strokeStyle = '#4a3322'; g.lineWidth = 2.5;
-    g.beginPath(); g.moveTo(0, 0); g.lineTo(len * 0.9, 0); g.stroke();
-    g.restore();
-  };
-  frond(2, S / 2, S * 0.96, 0, S * 0.2, 1.0);
-  for (let k = 0; k < 6; k++) {
-    const t = 0.18 + k * 0.13;
-    frond(S * t, S / 2, S * (0.5 - k * 0.05), (k % 2 ? 0.55 : -0.55), S * 0.1, 0.9 + r() * 0.3);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-}
-
-export function leafTexture() {
-  const S = 256, c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d');
-  const r = mulberry32(8);
-  for (let i = 0; i < 520; i++) {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * S * 0.46;
-    const x = S / 2 + Math.cos(a) * d, y = S / 2 + Math.sin(a) * d;
-    const s = 5 + r() * 7;
-    const sh = 70 + r() * 110;
-    g.fillStyle = `rgb(${sh * 0.45 | 0},${sh | 0},${sh * 0.3 | 0})`;
-    g.save(); g.translate(x, y); g.rotate(r() * Math.PI);
-    g.beginPath(); g.ellipse(0, 0, s, s * 0.45, 0, 0, Math.PI * 2); g.fill();
-    g.restore();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-// ---------- geometry ----------
-function quad(p0, p1, p2, p3, n, uvs) {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute([...p0, ...p1, ...p2, ...p3], 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute([...n[0], ...n[1], ...n[2], ...n[3]], 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs || [0, 0, 1, 0, 1, 1, 0, 1], 2));
-  g.setIndex([0, 1, 2, 0, 2, 3]);
-  return g;
-}
-
-function trunkGeometry(bare, r0, r1, top = 1) {
-  const g = new THREE.CylinderGeometry(r1, r0, top, 7, 4, true);
-  g.translate(0, top / 2, 0);
-  const uv = g.attributes.uv;
-  for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * 10);
-  return g;
-}
-
-function coniferFoliage(o) {
-  const r = mulberry32(o.seed);
-  const parts = [];
-  const cy = o.bare + (1 - o.bare) * 0.45;
-  for (let i = 0; i < o.layers; i++) {
-    const t = i / (o.layers - 1);
-    const y = o.bare + (1 - o.bare) * Math.pow(t, 0.92);
-    const rad = (o.radius * Math.pow(1 - t, o.shape) * (0.85 + r() * 0.3)) + 0.02;
-    const K = Math.max(4, Math.round(o.cards * (1 - t * 0.5)));
-    for (let k = 0; k < K; k++) {
-      const a = (k / K) * Math.PI * 2 + i * 0.9 + r() * 0.4;
-      const dir = [Math.cos(a), 0, Math.sin(a)];
-      const tan = [-Math.sin(a), 0, Math.cos(a)];
-      const tilt = (k % 2 ? 1 : -1) * (0.35 + r() * 0.3);
-      const w = rad * 0.8 + 0.02;
-      const droop = o.droop * rad;
-      const base = [0, y, 0];
-      const tip = [dir[0] * rad, y - droop, dir[2] * rad];
-      const off = (s, p) => [p[0] + tan[0] * w * s, p[1] + w * s * tilt, p[2] + tan[2] * w * s];
-      const p0 = off(-0.35, base), p1 = off(-1, tip), p2 = off(1, tip), p3 = off(0.35, base);
-      const nrm = (p) => { const v = new THREE.Vector3(p[0], (p[1] - cy) * 0.6 + 0.25, p[2]).normalize(); return [v.x, v.y, v.z]; };
-      parts.push(quad(p0, p1, p2, p3, [nrm(p0), nrm(p1), nrm(p2), nrm(p3)], [0, 0, 1, 0, 1, 1, 0, 1].map((v, idx) => (idx % 2 ? (v ? 0.95 : 0.05) : v))));
-    }
-  }
-  // leader
-  const top = 1.0, lw = o.radius * 0.18;
-  for (const a of [0, Math.PI / 2]) {
-    const dx = Math.cos(a) * lw, dz = Math.sin(a) * lw;
-    parts.push(quad([-dx, top - 0.12, -dz], [dx, top - 0.12, dz], [dx * 0.2, top + 0.02, dz * 0.2], [-dx * 0.2, top + 0.02, -dz * 0.2], [[0, 0.5, 1], [0, 0.5, 1], [0, 1, 0], [0, 1, 0]], [0.3, 0.2, 0.3, 0.8, 1, 0.8, 1, 0.2]));
-  }
-  return mergeGeometries(parts);
-}
-
-function broadleafFoliage(seed) {
-  const r = mulberry32(seed);
-  const parts = [];
-  const C = new THREE.Vector3(0, 0.64, 0);
-  for (let i = 0; i < 26; i++) {
-    const v = new THREE.Vector3(r() * 2 - 1, r() * 1.6 - 0.6, r() * 2 - 1).normalize();
-    const p = C.clone().add(new THREE.Vector3(v.x * 0.3, v.y * 0.24, v.z * 0.3).multiplyScalar(0.55 + r() * 0.5));
-    const s = 0.2 + r() * 0.12;
-    const a = new THREE.Vector3().crossVectors(v, new THREE.Vector3(r() - 0.5, 1, r() - 0.5)).normalize().multiplyScalar(s);
-    const b = new THREE.Vector3().crossVectors(v, a).normalize().multiplyScalar(s);
-    const P = [p.clone().sub(a).sub(b), p.clone().add(a).sub(b), p.clone().add(a).add(b), p.clone().sub(a).add(b)];
-    const n = P.map((q) => { const d = q.clone().sub(C).normalize(); d.y += 0.3; d.normalize(); return [d.x, d.y, d.z]; });
-    parts.push(quad(...P.map((q) => [q.x, q.y, q.z]), n));
-  }
-  return mergeGeometries(parts);
-}
-
+// Tree types (index = TREE enum): Blender species, height range (m) and 3D LOD0 distance factor.
 const SPECS = [
-  // redwood: huge, long bare trunk, narrow crown
-  { type: TREE.REDWOOD, trunk: [0.45, 0.028, 0.004], foliage: { bare: 0.38, radius: 0.15, layers: 16, cards: 10, droop: 0.3, shape: 0.8, seed: 1 }, bark: 0xb07560, leaf: 0x9ac08a, h: [48, 82], width: 0.3 },
-  { type: TREE.FIR, trunk: [0.1, 0.02, 0.003], foliage: { bare: 0.08, radius: 0.26, layers: 14, cards: 11, droop: 0.4, shape: 1.0, seed: 2 }, bark: 0x8a7a70, leaf: 0x8cb884, h: [24, 42], width: 0.5 },
-  { type: TREE.PINE, trunk: [0.55, 0.02, 0.005], foliage: { bare: 0.5, radius: 0.24, layers: 8, cards: 11, droop: 0.12, shape: 0.55, seed: 3 }, bark: 0x9a7058, leaf: 0xa8c888, h: [18, 34], width: 0.48 },
-  { type: TREE.BROADLEAF, trunk: [0.5, 0.03, 0.012, 0.7], broad: true, bark: 0x857565, leaf: 0x8ab05a, h: [10, 19], width: 0.72 },
+  { type: TREE.REDWOOD, name: 'redwood', h: [48, 82] },
+  { type: TREE.FIR, name: 'fir', h: [24, 42] },
+  { type: TREE.PINE, name: 'pine', h: [18, 34] },
+  { type: TREE.BROADLEAF, name: 'broadleaf', h: [11, 21] },
+  { type: TREE.PALM, name: 'palm', h: [12, 22] },
 ];
+const NT = SPECS.length;
 
 export class Trees {
   constructor(scene, renderer, assets, pool, field, biome, quality) {
@@ -155,8 +23,9 @@ export class Trees {
     this.pool = pool;
     this.field = field;
     this.biome = biome;
-    const q = { low: [240, 1100, 2500], medium: [380, 1800, 5000], high: [520, 2600, 8000] }[quality];
-    this.r3d = q[0]; this.rImp = q[1]; this.cap = q[2];
+    // [LOD0 radius, 3D radius, impostor radius, instance cap per type]
+    const q = { low: [55, 240, 1100, 2500], medium: [85, 380, 1800, 5000], high: [140, 520, 2600, 8000] }[quality];
+    this.r0 = q[0]; this.r3d = q[1]; this.rImp = q[2]; this.cap = q[3];
     this.tiles = new Map();
     this.inflight = 0;
     this.last3d = new THREE.Vector3(1e9, 0, 0);
@@ -164,48 +33,42 @@ export class Trees {
     this.lastReq = new THREE.Vector3(1e9, 0, 0);
     this.leafTint = new THREE.Color(biome.treeTint || 0xffffff);
 
-    const needles = needleTexture(), leaves = leafTexture();
-    const bark = assets.tex.bark_diff, barkN = assets.tex.bark_nor;
+    const A = assets.trees;
+    this.widths = SPECS.map((s) => (A.species[s.name] ? A.species[s.name].meta.radius * 2.1 : 0.5));
     this.types = SPECS.map((s) => {
-      const tg = trunkGeometry(...s.trunk);
-      const fg = s.broad ? broadleafFoliage(9) : coniferFoliage(s.foliage);
-      const tm = patchMaterial(new THREE.MeshStandardMaterial({ map: bark, normalMap: barkN, color: new THREE.Color(s.bark).multiplyScalar(2.4), roughness: 0.95 }), null, 'trunk');
-      const fm = new THREE.MeshStandardMaterial({ map: s.broad ? leaves : needles, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.85, color: new THREE.Color(s.leaf).multiply(this.leafTint) });
-      patchMaterial(fm, (sh) => {
-        sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-          #ifdef USE_INSTANCING
-          vec3 ip = instanceMatrix[3].xyz;
-          float sway = sin(uTimeW * 1.1 + ip.x * 0.05 + ip.z * 0.07) * 0.012 + sin(uTimeW * 2.7 + ip.x * 0.3) * 0.004;
-          transformed.x += sway * position.y * position.y;
-          transformed.z += sway * 0.6 * position.y * position.y;
-          #endif`).replace('#include <common>', '#include <common>\nuniform float uTimeW;');
-        sh.uniforms.uTimeW = G.uTime;
-        // soft translucency: foliage lit from behind glows a little
-        sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-          totalEmissiveRadiance += diffuseColor.rgb * 0.06;`);
-      }, 'foliage');
-      const trunk = new THREE.InstancedMesh(tg, tm, this.cap);
-      const fol = new THREE.InstancedMesh(fg, fm, this.cap);
-      for (const m of [trunk, fol]) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(m); }
-      fol.castShadow = trunk.castShadow = quality === 'high';
-      fol.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
-      trunk.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
-      return { spec: s, trunk, fol, tg, fg, tm, fm };
+      const sp = A.species[s.name];
+      if (!sp) return null;
+      const tm = barkMaterial(A, s.name, 'bark_' + s.name);
+      const fm = foliageMaterial(A, s.name, this.leafTint, 'fol_' + s.name);
+      const mk = (geo, mat) => {
+        const m = new THREE.InstancedMesh(geo, mat, this.cap);
+        m.count = 0; m.visible = false; m.frustumCulled = false;
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3);
+        m.castShadow = quality === 'high';
+        scene.add(m);
+        return m;
+      };
+      // lod[0] = full detail near the camera, lod[1] = thinned cards / simpler wood out to r3d
+      return { spec: s, sp, tm, fm, lod: [[mk(sp.bark0, tm), mk(sp.fol0, fm)], [mk(sp.bark1, tm), mk(sp.fol1, fm)]] };
     });
     this.bakeImpostors(renderer, assets);
     this.buildImpostorMesh();
   }
 
   bakeImpostors(renderer, assets) {
-    // 4 columns (types) x 2 rows (side view, top view) rendered once with neutral lighting.
+    // one column per type x 2 rows (side view, top view) rendered once with neutral lighting.
     const W = 256, H = 512;
-    const rt = new THREE.WebGLRenderTarget(W * 4, H * 2, { type: hdrType(renderer), samples: 4 });
+    const rt = new THREE.WebGLRenderTarget(W * NT, H * 2, { type: hdrType(renderer), samples: 4 });
     const scene = new THREE.Scene();
+    // same light rig as the game (game.js) so impostors match the 3D trees they replace
+    const b = this.biome;
     scene.environment = assets.envMap;
-    scene.environmentIntensity = 0.55;
-    const sun = new THREE.DirectionalLight(0xfff3e0, 2.2);
+    scene.environmentIntensity = b.envIntensity;
+    const sun = new THREE.DirectionalLight(0xfff3e0, b.sunIntensity);
     sun.position.set(0.4, 1, 0.6);
-    scene.add(sun, new THREE.AmbientLight(0xffffff, 0.25));
+    const zen = assets.skyInfo.zenith.clone(); const zl = Math.max(zen.r, zen.g, zen.b, 1e-3);
+    scene.add(sun, new THREE.HemisphereLight(new THREE.Color(zen.r / zl, zen.g / zl, zen.b / zl).lerp(new THREE.Color(1, 1, 1), 0.35), new THREE.Color(b.bounce || 0x665544), b.hemi ?? 0.9));
     const prevTarget = renderer.getRenderTarget();
     const prevClear = renderer.getClearColor(new THREE.Color());
     const prevAlpha = renderer.getClearAlpha();
@@ -215,8 +78,9 @@ export class Trees {
     const saveTime = G.uTime.value;
     G.uTime.value = 0;
     this.types.forEach((t, i) => {
-      const w = t.spec.width * 1.1;
-      const trunk = new THREE.Mesh(t.tg, t.tm), fol = new THREE.Mesh(t.fg, t.fm);
+      if (!t) return;
+      const w = this.widths[i];
+      const trunk = new THREE.Mesh(t.sp.bark0, t.tm), fol = new THREE.Mesh(t.sp.fol0, t.fm);
       scene.add(trunk, fol);
       const side = new THREE.OrthographicCamera(-w / 2, w / 2, 1.04, -0.02, -5, 5);
       side.position.set(0, 0, 2); side.lookAt(0, 0, 0);
@@ -251,7 +115,7 @@ export class Trees {
     geo.setAttribute('iData', this.impData);
     geo.instanceCount = 0;
     this.impMax = max;
-    const widths = SPECS.map((s) => s.width * 1.1);
+    const widths = this.widths;
     const mat = new THREE.ShaderMaterial({
       uniforms: { ...G, tImp: { value: this.impostorTex }, uLeaf: { value: this.leafTint } },
       vertexShader: /* glsl */ `
@@ -261,7 +125,7 @@ export class Trees {
         varying vec2 vUv;
         varying float vTop, vTint;
         varying vec2 vLit;
-        const float W[4] = float[4](${widths.map((w) => w.toFixed(3)).join(',')});
+        const float W[${NT}] = float[${NT}](${widths.map((w) => w.toFixed(3)).join(',')});
         void main() {
           int ty = int(iData.x + 0.5);
           float h = iPos.w, w = W[ty] * h;
@@ -277,7 +141,7 @@ export class Trees {
           float hh = mix(h * 1.06, w, vTop);
           vec3 p = c + right * position.x * w - up * position.y * -hh;
           vFogWorld = p;
-          vUv = vec2((float(ty) + uv.x) * 0.25, uv.y);
+          vUv = vec2((float(ty) + uv.x) / ${NT}.0, uv.y);
           vTint = iData.y;
           vLit = iData.zw;
           gl_Position = projectionMatrix * viewMatrix * curveWorld(vec4(p, 1.0));
@@ -358,38 +222,41 @@ export class Trees {
   }
 
   treeHeight(type, s) { const h = SPECS[type].h; return h[0] + (h[1] - h[0]) * s; }
-  treeRadius(type) { return SPECS[type].width * 0.5; }
+  treeRadius(type) { return this.widths[type] * 0.5; }
 
   rebuild3d(cam) {
-    const counts = [0, 0, 0, 0];
+    const counts = [new Array(NT).fill(0), new Array(NT).fill(0)];
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
     const up = new THREE.Vector3(0, 1, 0);
-    const r2 = this.r3d * this.r3d;
+    const r2 = this.r3d * this.r3d, r02 = this.r0 * this.r0;
     this.forEachTree(cam.x, cam.z, this.r3d, (x, y, z, s, rot, type, sh, sk) => {
-      const dx = x - cam.x, dz = z - cam.z;
-      if (dx * dx + dz * dz > r2) return;
+      const dx = x - cam.x, dz = z - cam.z, d2 = dx * dx + dz * dz;
+      if (d2 > r2) return;
       const T = this.types[type];
-      const c = counts[type];
-      if (c >= this.cap) return;
+      if (!T) return;
       const h = this.treeHeight(type, s);
+      // big trees switch to LOD1 a little later (up to 1.3x the distance)
+      const L = d2 < r02 * Math.min(1.69, Math.max(1, (h / 30) ** 2)) ? 0 : 1;
+      const c = counts[L][type];
+      if (c >= this.cap) return;
       q.setFromAxisAngle(up, rot);
       sc.set(h * (0.9 + s * 0.2), h, h * (0.9 + s * 0.2));
       p.set(x, y - 0.5, z);
       m4.compose(p, q, sc);
-      T.trunk.setMatrixAt(c, m4);
-      T.fol.setMatrixAt(c, m4);
       // baked terrain shadow / sky visibility darkens trees in canyons and mountain shadows
       const v = (0.8 + (rot * 1.7 % 1) * 0.4) * (0.22 + 0.78 * (0.62 * sh + 0.38 * sk));
       col.setRGB(v * (0.95 + s * 0.1), v, v * (0.9 + (1 - s) * 0.15));
-      T.trunk.setColorAt(c, col);
-      T.fol.setColorAt(c, col);
-      counts[type]++;
+      for (const m of T.lod[L]) { m.setMatrixAt(c, m4); m.setColorAt(c, col); }
+      counts[L][type]++;
     });
     this.types.forEach((T, i) => {
-      T.trunk.count = T.fol.count = counts[i];
-      T.trunk.instanceMatrix.needsUpdate = T.fol.instanceMatrix.needsUpdate = true;
-      T.fol.instanceColor.needsUpdate = true;
-      T.trunk.instanceColor.needsUpdate = true;
+      if (!T) return;
+      T.lod.forEach((pair, L) => pair.forEach((m) => {
+        m.count = counts[L][i];
+        m.visible = m.count > 0;
+        m.instanceMatrix.needsUpdate = true;
+        m.instanceColor.needsUpdate = true;
+      }));
     });
   }
 

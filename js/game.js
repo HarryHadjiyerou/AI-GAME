@@ -377,10 +377,10 @@ export class Game {
           return;
         }
         // crown volume
-        const spec = { 0: [0.4, 0.13], 1: [0.1, 0.24], 2: [0.55, 0.22], 3: [0.45, 0.3] }[type];
+        const spec = { 0: [0.4, 0.14], 1: [0.07, 0.25], 2: [0.52, 0.25], 3: [0.38, 0.34], 4: [0.8, 0.4] }[type];
         const t = (rel / h - spec[0]) / (1 - spec[0]);
         if (t < 0 || t > 1) return;
-        const cr = type === TREE.BROADLEAF ? spec[1] * h * Math.sin(Math.PI * t) : spec[1] * h * (1 - t);
+        const cr = type >= TREE.BROADLEAF ? spec[1] * h * Math.sin(Math.PI * t) : spec[1] * h * (1 - t);
         if (d < cr) brush = Math.max(brush, 1 - d / cr);
         else if (d < cr + 3 && speed > 15) this.nearMiss('THREAD', 0.6);
       });

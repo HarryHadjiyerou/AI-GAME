@@ -3,6 +3,15 @@ import * as THREE from 'three';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mulberry32 } from './noise.js';
+import { loadTreeAssets } from '../world/treeAssets.js';
+
+// Blender tree species needed per biome (see tools/trees)
+const TREE_SPECIES = {
+  forest: ['redwood', 'fir', 'pine', 'broadleaf', 'palm', 'titan_giant', 'titan_banyan'],
+  coast: ['pine', 'broadleaf', 'palm'],
+  mountains: ['fir', 'pine'],
+  city: ['broadleaf'],
+};
 
 const TEX_NAMES = ['grass', 'forestfloor', 'rock', 'cliff', 'snow', 'sand', 'bark', 'asphalt'];
 
@@ -45,6 +54,8 @@ export async function loadAssets(renderer, biome, onProgress, birdId) {
   for (const m of modelList) {
     jobs.push(gltfLoader.loadAsync(`assets/models/${m}.glb`).then((g) => { models[m] = g; }).catch((e) => console.warn('model failed', m, e)));
   }
+  let trees = null;
+  jobs.push(loadTreeAssets(renderer, TREE_SPECIES[biome] || [], manager).then((t) => { trees = t; }));
   await Promise.all(jobs);
 
   tex.noise = makeNoiseTexture(256, 7);
@@ -59,7 +70,7 @@ export async function loadAssets(renderer, biome, onProgress, birdId) {
   const skyInfo = analyseSky(sky.image, sunDir);
   hdr.dispose();
 
-  return { tex, envMap, sky, sunDir, sunColor: sunDir.color, skyInfo, models };
+  return { tex, envMap, sky, sunDir, sunColor: sunDir.color, skyInfo, models, trees };
 }
 
 // Brightest texel of the HDR gives the sun direction.

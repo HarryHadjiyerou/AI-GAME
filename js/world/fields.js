@@ -2,7 +2,7 @@
 // Pure JS so the same code runs on the main thread (physics, placement) and in the terrain worker.
 import { createNoise2D, fbm, ridged, clamp, lerp, smoothstep, hash2 } from '../core/noise.js';
 
-export const TREE = { REDWOOD: 0, FIR: 1, PINE: 2, BROADLEAF: 3 };
+export const TREE = { REDWOOD: 0, FIR: 1, PINE: 2, BROADLEAF: 3, PALM: 4 };
 
 // City grid constants (shared by terrain shader, layout and collisions)
 export const CITY = { PITCH: 110, ROAD: 22, RIVER_HALF: 70 };
@@ -86,8 +86,8 @@ function forestField(seed) {
     const I = info(x, z);
     const [forest] = masks(x, z, h, ny, I);
     if (rnd > forest * 0.92) return -1;
-    if (I.oasis > 0.3) return TREE.BROADLEAF;
     const t = hash2(x * 7 | 0, z * 7 | 0, 99);
+    if (I.oasis > 0.3) return t < 0.55 ? TREE.PALM : TREE.BROADLEAF;
     if (h > 1800) return t < 0.6 ? TREE.FIR : TREE.PINE;
     if (I.tMask > 0.6) return TREE.PINE;
     return t < 0.3 ? TREE.REDWOOD : t < 0.75 ? TREE.FIR : TREE.PINE;
@@ -155,6 +155,9 @@ function coastField(seed) {
     return [forest, sand, smoothstep(950, 1150, h) * smoothstep(0.6, 0.8, ny), 0];
   }
   function tree(x, z, h, ny, rnd) {
+    // palm groves on the low ground behind the beaches
+    const bs = z - shore(x), ba = beachAmt(x);
+    if (h > 2.5 && h < 30 && bs > 15 && bs < 260 && ny > 0.8 && ba > 0.35 && rnd < 0.4 * ba) return TREE.PALM;
     const [forest] = masks(x, z, h, ny);
     if (rnd > forest * 0.8) return -1;
     return hash2(x | 0, z | 0, 5) < 0.7 ? TREE.PINE : TREE.BROADLEAF;
